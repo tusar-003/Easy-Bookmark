@@ -23,17 +23,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectedBookmarks = new Set()
   let rightClickedBookmark = null
 
-  // Load theme preference from storage
-  chrome.storage.local.get(["theme"], (result) => {
-    if (result.theme === "light") {
-      document.body.classList.remove("dark-theme")
-      themeToggle.checked = true
-    }
-  })
+  // Load theme preference from storage and apply it immediately
+  function loadAndApplyTheme() {
+    chrome.storage.local.get(["theme"], (result) => {
+      const isDark = result.theme === "dark"
+      document.body.classList.toggle("dark-theme", isDark)
+      if (themeToggle) {
+        themeToggle.checked = !isDark
+      }
+    })
+  }
 
   // Theme toggle functionality
   themeToggle.addEventListener("change", () => {
-    const isDark = !document.body.classList.toggle("dark-theme")
+    const isDark = !themeToggle.checked
+    document.body.classList.toggle("dark-theme", isDark)
     chrome.storage.local.set({ theme: isDark ? "dark" : "light" })
   })
 
@@ -575,4 +579,19 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMostVisitedSites()
   loadBookmarks()
 })
+
+// Apply theme immediately before the DOM is fully loaded
+function loadAndApplyTheme() {
+  chrome.storage.local.get(["theme"], (result) => {
+    const isDark = result.theme === "dark"
+    document.body.classList.toggle("dark-theme", isDark)
+    const themeToggle = document.getElementById("themeToggle")
+    if (themeToggle) {
+      themeToggle.checked = !isDark
+    }
+  })
+}
+
+// Call this function immediately when the script runs
+loadAndApplyTheme()
 
