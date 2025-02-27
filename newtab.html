@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Bookmarks</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="container">
+    <header>
+      <h1>Bookmarks</h1>
+      <div class="header-controls">
+        <div class="search-container">
+          <input type="text" id="searchInput" placeholder="Search...">
+        </div>
+        <div class="theme-switch-wrapper">
+          <span class="theme-icon">Light</span>
+          <label class="switch">
+            <input type="checkbox" id="themeToggle">
+            <span class="slider">
+              <span class="switch-indicator"></span>
+            </span>
+          </label>
+          <span class="theme-icon">Dark</span>
+        </div>
+      </div>
+    </header>
+    
+    <div class="most-visited-section">
+      <h2>Most Visited</h2>
+      <div class="most-visited-container" id="mostVisitedContainer">
+        <!-- Most visited sites will be loaded here -->
+        <div class="loading-small">Loading...</div>
+      </div>
+    </div>
+    
+    <h2>All Bookmarks</h2>
+    <div class="bookmarks-container" id="bookmarksContainer">
+      <!-- Bookmarks will be loaded here -->
+      <div class="loading">Loading your bookmarks...</div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
