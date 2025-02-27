@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "Compact Bookmark Icons",
+    "name": "Easy Bookmarks",
     "version": "1.0",
     "description": "Display all bookmarks as icons on new tab page",
     "permissions": ["bookmarks", "storage", "topSites"],
