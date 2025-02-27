@@ -12,6 +12,10 @@
         <div class="search-container">
           <input type="text" id="searchInput" placeholder="Search...">
         </div>
+        <div class="bookmark-actions">
+          <button id="addBookmarkBtn" class="action-button">Add Bookmark</button>
+          <button id="importBookmarksBtn" class="action-button">Import Bookmarks</button>
+        </div>
         <div class="theme-switch-wrapper">
           <span class="theme-icon">Light</span>
           <label class="switch">
@@ -39,6 +43,46 @@
       <div class="loading">Loading your bookmarks...</div>
     </div>
   </div>
+
+  <!-- Add Bookmark Modal -->
+  <div id="addBookmarkModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Add New Bookmark</h2>
+      <form id="addBookmarkForm">
+        <div class="form-group">
+          <label for="bookmarkUrl">URL:</label>
+          <input type="url" id="bookmarkUrl" placeholder="https://example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="bookmarkTitle">Title (optional):</label>
+          <input type="text" id="bookmarkTitle" placeholder="My Website">
+        </div>
+        <button type="submit" class="submit-button">Add Bookmark</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Import Bookmarks Modal -->
+  <div id="importModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Import Bookmarks</h2>
+      <div class="import-instructions">
+        <p>To import bookmarks from another browser:</p>
+        <ol>
+          <li>Export bookmarks from your browser as HTML file</li>
+          <li>Upload the file below</li>
+        </ol>
+      </div>
+      <div class="import-form">
+        <input type="file" id="importFile" accept=".html">
+        <button id="importSubmitBtn" class="submit-button">Import</button>
+      </div>
+      <div id="importStatus" class="import-status"></div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>

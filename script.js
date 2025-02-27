@@ -3,6 +3,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const mostVisitedContainer = document.getElementById('mostVisitedContainer');
     const searchInput = document.getElementById('searchInput');
     const themeToggle = document.getElementById('themeToggle');
+    const addBookmarkBtn = document.getElementById('addBookmarkBtn');
+    const importBookmarksBtn = document.getElementById('importBookmarksBtn');
+    const addBookmarkModal = document.getElementById('addBookmarkModal');
+    const importModal = document.getElementById('importModal');
+    const addBookmarkForm = document.getElementById('addBookmarkForm');
+    const importFile = document.getElementById('importFile');
+    const importSubmitBtn = document.getElementById('importSubmitBtn');
+    const importStatus = document.getElementById('importStatus');
+    
     let allBookmarks = [];
   
     // Load theme preference from storage
@@ -24,8 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.topSites.get((sites) => {
         mostVisitedContainer.innerHTML = '';
         
-        // Limit to 6 sites
-        const topSites = sites.slice(0, 6);
+        // Limit to 12 sites
+        const topSites = sites.slice(0, 12);
         
         if (topSites.length === 0) {
           mostVisitedContainer.innerHTML = '<div class="loading-small">No frequently visited sites yet</div>';
@@ -42,12 +51,13 @@ document.addEventListener('DOMContentLoaded', () => {
           favicon.alt = site.title;
           favicon.onerror = () => { favicon.src = 'icons/default-favicon.png'; };
           
-          const title = document.createElement('div');
-          title.className = 'most-visited-title';
-          title.textContent = site.title || extractDomain(site.url);
+          // Create tooltip with title
+          const tooltip = document.createElement('div');
+          tooltip.className = 'bookmark-tooltip';
+          tooltip.textContent = site.title || extractDomain(site.url);
           
           siteElement.appendChild(favicon);
-          siteElement.appendChild(title);
+          siteElement.appendChild(tooltip);
           
           siteElement.addEventListener('click', () => {
             window.location.href = site.url;
@@ -165,6 +175,169 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', (e) => {
       filterBookmarks(e.target.value);
     });
+  
+    // Modal management functions
+    function openModal(modal) {
+      modal.style.display = 'flex';
+    }
+  
+    function closeModal(modal) {
+      modal.style.display = 'none';
+    }
+  
+    // Add bookmark functionality
+    addBookmarkBtn.addEventListener('click', () => {
+      document.getElementById('bookmarkUrl').value = '';
+      document.getElementById('bookmarkTitle').value = '';
+      openModal(addBookmarkModal);
+    });
+  
+    // Import bookmarks functionality
+    importBookmarksBtn.addEventListener('click', () => {
+      importFile.value = '';
+      importStatus.textContent = '';
+      importStatus.className = 'import-status';
+      openModal(importModal);
+    });
+  
+    // Close modals when clicking the X button
+    document.querySelectorAll('.close-button').forEach(button => {
+      button.addEventListener('click', () => {
+        closeModal(addBookmarkModal);
+        closeModal(importModal);
+      });
+    });
+  
+    // Close modals when clicking outside the modal content
+    window.addEventListener('click', (event) => {
+      if (event.target === addBookmarkModal) {
+        closeModal(addBookmarkModal);
+      }
+      if (event.target === importModal) {
+        closeModal(importModal);
+      }
+    });
+  
+    // Process add bookmark form submission
+    addBookmarkForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const url = document.getElementById('bookmarkUrl').value;
+      let title = document.getElementById('bookmarkTitle').value;
+      
+      if (!title) {
+        title = extractDomain(url);
+      }
+      
+      // Add the bookmark to Chrome's bookmarks
+      chrome.bookmarks.create({
+        title: title,
+        url: url
+      }, (newBookmark) => {
+        // Add to our local bookmarks array
+        allBookmarks.push({
+          id: newBookmark.id,
+          title: title,
+          url: url,
+          folder: ''
+        });
+        
+        // Rerender bookmarks
+        renderBookmarks(allBookmarks);
+        
+        // Close the modal
+        closeModal(addBookmarkModal);
+      });
+    });
+  
+    // Helper to create a bookmark from URL and title
+    function createBookmark(url, title) {
+      return new Promise((resolve, reject) => {
+        chrome.bookmarks.create({
+          title: title || extractDomain(url),
+          url: url
+        }, (newBookmark) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(newBookmark);
+          }
+        });
+      });
+    }
+  
+    // Process HTML bookmark file
+    function processBookmarkFile(fileContent) {
+      // Extract URLs from the HTML file
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(fileContent, 'text/html');
+      const links = doc.querySelectorAll('a');
+      
+      const bookmarksToAdd = [];
+      links.forEach(link => {
+        const url = link.getAttribute('href');
+        const title = link.textContent.trim();
+        
+        if (url && url.startsWith('http')) {
+          bookmarksToAdd.push({ url, title });
+        }
+      });
+      
+      return bookmarksToAdd;
+    }
+  
+    // Import bookmarks from file
+    importSubmitBtn.addEventListener('click', async () => {
+      if (!importFile.files.length) {
+        importStatus.textContent = 'Please select a file to import';
+        importStatus.className = 'import-status status-error';
+        return;
+      }
+      
+      const file = importFile.files[0];
+      
+      try {
+        const fileContent = await readFileAsText(file);
+        const bookmarksToAdd = processBookmarkFile(fileContent);
+        
+        if (bookmarksToAdd.length === 0) {
+          importStatus.textContent = 'No valid bookmarks found in the file';
+          importStatus.className = 'import-status status-error';
+          return;
+        }
+        
+        // Add each bookmark
+        let addedCount = 0;
+        for (const bookmark of bookmarksToAdd) {
+          try {
+            await createBookmark(bookmark.url, bookmark.title);
+            addedCount++;
+          } catch (error) {
+            console.error('Failed to add bookmark:', bookmark.url, error);
+          }
+        }
+        
+        importStatus.textContent = `Successfully imported ${addedCount} bookmarks`;
+        importStatus.className = 'import-status status-success';
+        
+        // Reload the bookmarks display
+        loadBookmarks();
+        
+      } catch (error) {
+        importStatus.textContent = 'Error importing bookmarks: ' + error.message;
+        importStatus.className = 'import-status status-error';
+      }
+    });
+  
+    // Helper to read file content
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = (error) => reject(error);
+        reader.readAsText(file);
+      });
+    }
   
     // Initial load
     loadMostVisitedSites();
