@@ -7,8 +7,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const deleteBookmarksBtn = document.getElementById("deleteBookmarksBtn")
   const importBookmarksBtn = document.getElementById("importBookmarksBtn")
   const addBookmarkModal = document.getElementById("addBookmarkModal")
+  const editBookmarkModal = document.getElementById("editBookmarkModal")
   const importModal = document.getElementById("importModal")
   const addBookmarkForm = document.getElementById("addBookmarkForm")
+  const editBookmarkForm = document.getElementById("editBookmarkForm")
   const importFile = document.getElementById("importFile")
   const importSubmitBtn = document.getElementById("importSubmitBtn")
   const importStatus = document.getElementById("importStatus")
@@ -156,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const tooltip = document.createElement("div")
       tooltip.className = "bookmark-tooltip"
-      tooltip.textContent = bookmark.title
+      tooltip.textContent = bookmark.title // Only show the title in tooltip, not URL
 
       bookmarkElement.appendChild(favicon)
       bookmarkElement.appendChild(tooltip)
@@ -261,6 +263,32 @@ document.addEventListener("DOMContentLoaded", () => {
     })
   }
 
+  // Edit a bookmark
+  function editBookmark(bookmarkId, newTitle, newUrl) {
+    chrome.bookmarks.update(
+      bookmarkId,
+      {
+        title: newTitle,
+        url: newUrl,
+      },
+      (updatedBookmark) => {
+        if (chrome.runtime.lastError) {
+          console.error("Error updating bookmark:", chrome.runtime.lastError)
+          return
+        }
+
+        // Update in our local array
+        const index = allBookmarks.findIndex((bookmark) => bookmark.id === bookmarkId)
+        if (index !== -1) {
+          allBookmarks[index].title = newTitle
+          allBookmarks[index].url = newUrl
+        }
+
+        renderBookmarks(allBookmarks)
+      },
+    )
+  }
+
   // Delete multiple bookmarks
   function deleteSelectedBookmarks() {
     if (selectedBookmarks.size === 0) return
@@ -342,6 +370,20 @@ document.addEventListener("DOMContentLoaded", () => {
     exitSelectionMode()
   })
 
+  // Context menu edit option
+  document.getElementById("contextMenuEdit").addEventListener("click", () => {
+    if (rightClickedBookmark) {
+      // Populate edit form with current bookmark data
+      document.getElementById("editBookmarkUrl").value = rightClickedBookmark.url
+      document.getElementById("editBookmarkTitle").value = rightClickedBookmark.title
+      document.getElementById("editBookmarkId").value = rightClickedBookmark.id
+
+      // Open edit modal
+      openModal(editBookmarkModal)
+    }
+    contextMenu.classList.remove("active")
+  })
+
   // Context menu delete option
   document.getElementById("contextMenuDelete").addEventListener("click", () => {
     if (rightClickedBookmark) {
@@ -351,6 +393,21 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     contextMenu.classList.remove("active")
+  })
+
+  // Process edit bookmark form submission
+  editBookmarkForm.addEventListener("submit", (e) => {
+    e.preventDefault()
+
+    const bookmarkId = document.getElementById("editBookmarkId").value
+    const newUrl = document.getElementById("editBookmarkUrl").value
+    const newTitle = document.getElementById("editBookmarkTitle").value
+
+    // Update the bookmark
+    editBookmark(bookmarkId, newTitle, newUrl)
+
+    // Close the modal
+    closeModal(editBookmarkModal)
   })
 
   // Import bookmarks functionality
@@ -365,6 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".close-button").forEach((button) => {
     button.addEventListener("click", () => {
       closeModal(addBookmarkModal)
+      closeModal(editBookmarkModal)
       closeModal(importModal)
     })
   })
@@ -373,6 +431,9 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("click", (event) => {
     if (event.target === addBookmarkModal) {
       closeModal(addBookmarkModal)
+    }
+    if (event.target === editBookmarkModal) {
+      closeModal(editBookmarkModal)
     }
     if (event.target === importModal) {
       closeModal(importModal)
