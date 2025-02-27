@@ -14,6 +14,9 @@
         </div>
         <div class="bookmark-actions">
           <button id="addBookmarkBtn" class="action-button">Add Bookmark</button>
+          <button id="deleteBookmarksBtn" class="action-button delete-button">Delete Bookmarks</button>
+          <button id="deleteSelectedBtn" class="action-button delete-button" style="display: none;">Delete Selected</button>
+          <button id="cancelSelectionBtn" class="action-button cancel-button" style="display: none;">Cancel</button>
           <button id="importBookmarksBtn" class="action-button">Import Bookmarks</button>
         </div>
         <div class="theme-switch-wrapper">
@@ -42,6 +45,11 @@
       <!-- Bookmarks will be loaded here -->
       <div class="loading">Loading your bookmarks...</div>
     </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="contextMenu" class="context-menu">
+    <div class="context-menu-item" id="contextMenuDelete">Delete Bookmark</div>
   </div>
 
   <!-- Add Bookmark Modal -->
@@ -86,3 +94,4 @@
   <script src="script.js"></script>
 </body>
 </html>
+
