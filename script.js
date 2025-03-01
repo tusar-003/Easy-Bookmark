@@ -19,9 +19,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const cancelSelectionBtn = document.getElementById("cancelSelectionBtn")
 
   let allBookmarks = []
+  let mostVisitedSites = []
   let isSelectionMode = false
   const selectedBookmarks = new Set()
   let rightClickedBookmark = null
+  let rightClickedMostVisited = null
 
   // Load theme preference from storage and apply it immediately
   function loadAndApplyTheme() {
@@ -45,40 +47,107 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadMostVisitedSites() {
     chrome.topSites.get((sites) => {
       mostVisitedContainer.innerHTML = ""
+      
+      // Store in global variable for later use
+      mostVisitedSites = sites.slice(0, 12)
 
-      // Limit to 12 sites
-      const topSites = sites.slice(0, 12)
-
-      if (topSites.length === 0) {
+      if (mostVisitedSites.length === 0) {
         mostVisitedContainer.innerHTML = '<div class="loading-small">No frequently visited sites yet</div>'
         return
       }
 
-      topSites.forEach((site) => {
-        const siteElement = document.createElement("div")
-        siteElement.className = "most-visited-item"
+      // Retrieve custom names for most visited sites
+      chrome.storage.local.get(["mostVisitedCustomNames"], (result) => {
+        const customNames = result.mostVisitedCustomNames || {}
+        
+        mostVisitedSites.forEach((site, index) => {
+          const siteElement = document.createElement("div")
+          siteElement.className = "most-visited-item"
+          // Store the index for identification
+          siteElement.dataset.index = index
 
-        const favicon = document.createElement("img")
-        favicon.className = "most-visited-icon"
-        favicon.src = getFaviconUrl(site.url)
-        favicon.alt = site.title
-        favicon.onerror = () => {
-          favicon.src = "icons/default-favicon.png"
-        }
+          const favicon = document.createElement("img")
+          favicon.className = "most-visited-icon"
+          favicon.src = getFaviconUrl(site.url)
+          favicon.alt = site.title
+          favicon.onerror = () => {
+            favicon.src = "icons/default-favicon.png"
+          }
 
-        // Create tooltip with title
-        const tooltip = document.createElement("div")
-        tooltip.className = "bookmark-tooltip"
-        tooltip.textContent = site.title || extractDomain(site.url)
+          // Use custom name if available, otherwise use original title
+          const displayTitle = customNames[site.url] || site.title || extractDomain(site.url)
+          
+          // Create tooltip with title
+          const tooltip = document.createElement("div")
+          tooltip.className = "bookmark-tooltip"
+          tooltip.textContent = displayTitle
 
-        siteElement.appendChild(favicon)
-        siteElement.appendChild(tooltip)
+          siteElement.appendChild(favicon)
+          siteElement.appendChild(tooltip)
 
-        siteElement.addEventListener("click", () => {
-          window.location.href = site.url
+          siteElement.addEventListener("click", () => {
+            window.location.href = site.url
+          })
+          
+          // Add context menu on right click
+          siteElement.addEventListener("contextmenu", (e) => {
+            e.preventDefault()
+            rightClickedMostVisited = {
+              index: index,
+              url: site.url,
+              title: displayTitle,
+              originalTitle: site.title
+            }
+
+            // Position and show context menu
+            contextMenu.style.left = `${e.pageX}px`
+            contextMenu.style.top = `${e.pageY}px`
+            contextMenu.classList.add("active")
+            
+            // Show appropriate context menu items
+            document.getElementById("contextMenuEdit").textContent = "Edit"
+            document.getElementById("contextMenuDelete").textContent = "Remove"
+          })
+
+          mostVisitedContainer.appendChild(siteElement)
         })
+      })
+    })
+  }
 
-        mostVisitedContainer.appendChild(siteElement)
+  // Function to remove a site from most visited
+  function removeMostVisitedSite(url) {
+    // Chrome's topSites API doesn't provide a direct way to remove sites,
+    // but we can use chrome.history.deleteUrl to achieve a similar effect
+    chrome.history.deleteUrl({ url: url }, () => {
+      if (chrome.runtime.lastError) {
+        console.error("Error removing site:", chrome.runtime.lastError)
+        return
+      }
+      
+      // Remove any custom name for this URL
+      chrome.storage.local.get(["mostVisitedCustomNames"], (result) => {
+        const customNames = result.mostVisitedCustomNames || {}
+        if (customNames[url]) {
+          delete customNames[url]
+          chrome.storage.local.set({ mostVisitedCustomNames: customNames })
+        }
+        
+        // Reload the most visited sites
+        loadMostVisitedSites()
+      })
+    })
+  }
+  
+  // Function to edit most visited site name
+  function editMostVisitedSite(url, newTitle) {
+    chrome.storage.local.get(["mostVisitedCustomNames"], (result) => {
+      const customNames = result.mostVisitedCustomNames || {}
+      customNames[url] = newTitle
+      
+      chrome.storage.local.set({ mostVisitedCustomNames: customNames }, () => {
+        // Reload most visited sites to reflect changes
+        loadMostVisitedSites()
       })
     })
   }
@@ -192,11 +261,16 @@ document.addEventListener("DOMContentLoaded", () => {
       bookmarkElement.addEventListener("contextmenu", (e) => {
         e.preventDefault()
         rightClickedBookmark = bookmark
+        rightClickedMostVisited = null
 
         // Position and show context menu
         contextMenu.style.left = `${e.pageX}px`
         contextMenu.style.top = `${e.pageY}px`
         contextMenu.classList.add("active")
+        
+        // Show appropriate context menu items
+        document.getElementById("contextMenuEdit").textContent = "Edit Bookmark"
+        document.getElementById("contextMenuDelete").textContent = "Delete Bookmark"
       })
 
       bookmarksContainer.appendChild(bookmarkElement)
@@ -384,6 +458,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Open edit modal
       openModal(editBookmarkModal)
+    } else if (rightClickedMostVisited) {
+      // Create a specific most visited site edit modal
+      document.getElementById("editBookmarkUrl").value = rightClickedMostVisited.url
+      document.getElementById("editBookmarkUrl").disabled = true // URL cannot be edited for most visited
+      document.getElementById("editBookmarkTitle").value = rightClickedMostVisited.title
+      document.getElementById("editBookmarkId").value = "most-visited-" + rightClickedMostVisited.index
+      
+      // Change the title of the modal
+      document.querySelector("#editBookmarkModal h2").textContent = "Edit"
+      
+      // Open edit modal
+      openModal(editBookmarkModal)
     }
     contextMenu.classList.remove("active")
   })
@@ -394,6 +480,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const confirmDelete = confirm(`Are you sure you want to delete "${rightClickedBookmark.title}"?`)
       if (confirmDelete) {
         deleteBookmark(rightClickedBookmark.id)
+      }
+    } else if (rightClickedMostVisited) {
+      const confirmDelete = confirm(`Are you sure you want to remove "${rightClickedMostVisited.title}" from most visited sites?`)
+      if (confirmDelete) {
+        removeMostVisitedSite(rightClickedMostVisited.url)
       }
     }
     contextMenu.classList.remove("active")
@@ -407,8 +498,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const newUrl = document.getElementById("editBookmarkUrl").value
     const newTitle = document.getElementById("editBookmarkTitle").value
 
-    // Update the bookmark
-    editBookmark(bookmarkId, newTitle, newUrl)
+    // Check if this is a most visited site or regular bookmark
+    if (bookmarkId.startsWith("most-visited-")) {
+      // This is a most visited site
+      const mostVisitedUrl = rightClickedMostVisited.url
+      editMostVisitedSite(mostVisitedUrl, newTitle)
+      
+      // Reset modal title
+      document.querySelector("#editBookmarkModal h2").textContent = "Edit Bookmark"
+      document.getElementById("editBookmarkUrl").disabled = false
+    } else {
+      // This is a regular bookmark
+      editBookmark(bookmarkId, newTitle, newUrl)
+    }
 
     // Close the modal
     closeModal(editBookmarkModal)
@@ -428,6 +530,10 @@ document.addEventListener("DOMContentLoaded", () => {
       closeModal(addBookmarkModal)
       closeModal(editBookmarkModal)
       closeModal(importModal)
+      
+      // Reset modal title and URL field when closing
+      document.querySelector("#editBookmarkModal h2").textContent = "Edit Bookmark"
+      document.getElementById("editBookmarkUrl").disabled = false
     })
   })
 
@@ -438,6 +544,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (event.target === editBookmarkModal) {
       closeModal(editBookmarkModal)
+      
+      // Reset modal title and URL field when closing
+      document.querySelector("#editBookmarkModal h2").textContent = "Edit Bookmark"
+      document.getElementById("editBookmarkUrl").disabled = false
     }
     if (event.target === importModal) {
       closeModal(importModal)
@@ -594,4 +704,3 @@ function loadAndApplyTheme() {
 
 // Call this function immediately when the script runs
 loadAndApplyTheme()
-
