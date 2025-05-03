@@ -88,13 +88,6 @@ This extension:
 - `script.js`: Main JavaScript functionality
 - `icons/`: Extension icons
 
-## Support
-
-If you encounter any issues or have suggestions for improvements, please:
-1. Check the [issues page](https://github.com/tusar-003/easy-bookmarks/issues) to see if it's already reported
-2. If not, create a new issue with detailed information about the problem
-
-
 ## Author
 
 LinkedIn: [Tusar mondal](https://www.linkedin.com/in/tusarmondal/)
