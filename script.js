@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("themeToggle")
   const addBookmarkBtn = document.getElementById("addBookmarkBtn")
   const deleteBookmarksBtn = document.getElementById("deleteBookmarksBtn")
-  const importBookmarksBtn = document.getElementById("importBookmarksBtn")
+  const importBookmarksBtn = document.getElementById("importBookmarksBtn");
   const addBookmarkModal = document.getElementById("addBookmarkModal")
   const editBookmarkModal = document.getElementById("editBookmarkModal")
   const importModal = document.getElementById("importModal")
@@ -25,23 +25,24 @@ document.addEventListener("DOMContentLoaded", () => {
   let rightClickedBookmark = null
   let rightClickedMostVisited = null
 
-  // Load theme preference from storage and apply it immediately
-  function loadAndApplyTheme() {
+  // Load theme preference from storage and apply it
+  function applyTheme() {
     chrome.storage.local.get(["theme"], (result) => {
-      const isDark = result.theme === "dark"
-      document.body.classList.toggle("dark-theme", isDark)
+      // Default to dark theme if no preference is set
+      const isDark = result.theme !== 'light';
+      document.body.classList.toggle("dark-theme", isDark);
       if (themeToggle) {
-        themeToggle.checked = !isDark
+        themeToggle.checked = isDark;
       }
-    })
+    });
   }
 
   // Theme toggle functionality
   themeToggle.addEventListener("change", () => {
-    const isDark = !themeToggle.checked
-    document.body.classList.toggle("dark-theme", isDark)
-    chrome.storage.local.set({ theme: isDark ? "dark" : "light" })
-  })
+    const isDark = themeToggle.checked;
+    document.body.classList.toggle("dark-theme", isDark);
+    chrome.storage.local.set({ theme: isDark ? "dark" : "light" });
+  });
 
   // Load most visited sites
   function loadMostVisitedSites() {
@@ -686,21 +687,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Initial load
-  loadMostVisitedSites()
-  loadBookmarks()
-})
-
-// Apply theme immediately before the DOM is fully loaded
-function loadAndApplyTheme() {
-  chrome.storage.local.get(["theme"], (result) => {
-    const isDark = result.theme === "dark"
-    document.body.classList.toggle("dark-theme", isDark)
-    const themeToggle = document.getElementById("themeToggle")
-    if (themeToggle) {
-      themeToggle.checked = !isDark
-    }
-  })
-}
-
-// Call this function immediately when the script runs
-loadAndApplyTheme()
+  applyTheme();
+  loadMostVisitedSites();
+  loadBookmarks();
+});
