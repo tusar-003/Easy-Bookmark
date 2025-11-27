@@ -170,6 +170,22 @@ h2 {
   background-color: var(--cancel-button-hover);
 }
 
+.edit-button {
+  background-color: #ff9800;
+}
+
+.edit-button:hover {
+  background-color: #f57c00;
+}
+
+.done-button {
+  background-color: #4caf50;
+}
+
+.done-button:hover {
+  background-color: #388e3c;
+}
+
 /* Switch styles */
 .switch {
   position: relative;
@@ -363,6 +379,112 @@ input:checked + .slider:before {
 
 .bookmark-item.selected {
   background-color: rgba(66, 133, 244, 0.1);
+}
+
+/* Edit mode styles */
+.edit-mode .bookmark-item {
+  cursor: grab;
+  position: relative;
+  animation: wobble 0.3s ease-in-out infinite alternate;
+}
+
+.edit-mode .bookmark-item:nth-child(even) {
+  animation-delay: 0.15s;
+}
+
+.edit-mode .bookmark-item:active {
+  cursor: grabbing;
+  animation: none;
+}
+
+/* Wobble animation for edit mode */
+@keyframes wobble {
+  0% {
+    transform: rotate(-2.5deg) scale(0.98);
+  }
+  100% {
+    transform: rotate(2.5deg) scale(1.02);
+  }
+}
+
+.bookmark-item.dragging {
+  opacity: 0.4;
+  transform: scale(1.05) rotate(3deg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  animation: none !important;
+}
+
+/* Drop indicator - line between items */
+.bookmark-item.drag-over-left::before {
+  content: "" !important;
+  position: absolute !important;
+  left: -4px !important;
+  top: 5px !important;
+  bottom: 5px !important;
+  width: 3px !important;
+  height: auto !important;
+  background: var(--highlight-color) !important;
+  border-radius: 2px !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 8px var(--highlight-color);
+  animation: pulse-indicator 0.5s ease-in-out infinite alternate !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+.bookmark-item.drag-over-right::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  background: var(--highlight-color);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--highlight-color);
+  animation: pulse-indicator 0.5s ease-in-out infinite alternate;
+  z-index: 100;
+}
+
+@keyframes pulse-indicator {
+  0% {
+    opacity: 0.7;
+    transform: scaleY(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.bookmarks-container.edit-mode-active {
+  border: 2px dashed var(--highlight-color);
+  border-radius: 8px;
+  padding: 10px;
+  background-color: rgba(66, 133, 244, 0.05);
+}
+
+.edit-mode-indicator {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: rgba(255, 152, 0, 0.2);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-color);
+}
+
+.edit-mode .edit-mode-indicator {
+  display: flex;
+}
+
+.edit-mode-indicator svg {
+  width: 16px;
+  height: 16px;
+  fill: #ff9800;
 }
 
 /* Context menu styles */

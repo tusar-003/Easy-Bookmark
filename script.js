@@ -17,13 +17,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const contextMenu = document.getElementById("contextMenu")
   const deleteSelectedBtn = document.getElementById("deleteSelectedBtn")
   const cancelSelectionBtn = document.getElementById("cancelSelectionBtn")
+  const editModeBtn = document.getElementById("editModeBtn")
+  const doneEditingBtn = document.getElementById("doneEditingBtn")
 
   let allBookmarks = []
   let mostVisitedSites = []
   let isSelectionMode = false
+  let isEditMode = false
   const selectedBookmarks = new Set()
   let rightClickedBookmark = null
   let rightClickedMostVisited = null
+  let draggedElement = null
+  let draggedBookmarkId = null
 
   // Load theme preference from storage and apply it
   function applyTheme() {
@@ -154,13 +159,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load all bookmarks
   function loadBookmarks() {
-    chrome.bookmarks.getTree((bookmarkTreeNodes) => {
+    chrome.bookmarks.getTree(async (bookmarkTreeNodes) => {
       bookmarksContainer.innerHTML = ""
       allBookmarks = []
       selectedBookmarks.clear()
 
       // Process all bookmark nodes
       processBookmarkNodes(bookmarkTreeNodes[0].children)
+
+      // Apply saved order
+      await applyBookmarkOrder(allBookmarks)
 
       // Render the bookmarks
       renderBookmarks(allBookmarks)
@@ -342,18 +350,36 @@ document.addEventListener("DOMContentLoaded", () => {
         bookmarkElement.appendChild(checkbox)
       }
 
+      // Add drag and drop attributes for edit mode
+      if (isEditMode) {
+        bookmarkElement.setAttribute('draggable', 'true')
+        
+        bookmarkElement.addEventListener('dragstart', (e) => handleDragStart(e, bookmark))
+        bookmarkElement.addEventListener('dragend', handleDragEnd)
+        bookmarkElement.addEventListener('dragover', handleDragOver)
+        bookmarkElement.addEventListener('dragleave', handleDragLeave)
+        bookmarkElement.addEventListener('drop', handleDrop)
+      }
+
       // Handle click event based on mode
       bookmarkElement.addEventListener("click", (e) => {
         if (isSelectionMode) {
           e.preventDefault()
           toggleBookmarkSelection(bookmark.id, bookmarkElement)
+        } else if (isEditMode) {
+          // In edit mode, clicking doesn't navigate
+          e.preventDefault()
         } else {
           window.location.href = bookmark.url
         }
       })
 
-      // Add context menu on right click
+      // Add context menu on right click (disabled in edit mode)
       bookmarkElement.addEventListener("contextmenu", (e) => {
+        if (isEditMode) {
+          e.preventDefault()
+          return
+        }
         e.preventDefault()
         rightClickedBookmark = bookmark
         rightClickedMostVisited = null
@@ -419,6 +445,201 @@ document.addEventListener("DOMContentLoaded", () => {
     deleteBookmarksBtn.style.display = "block"
     deleteSelectedBtn.style.display = "none"
     cancelSelectionBtn.style.display = "none"
+    renderBookmarks(allBookmarks)
+  }
+
+  // Enter edit mode (for drag and drop reordering)
+  function enterEditMode() {
+    // Exit selection mode if active
+    if (isSelectionMode) {
+      exitSelectionMode()
+    }
+    
+    isEditMode = true
+    document.body.classList.add("edit-mode")
+    bookmarksContainer.classList.add("edit-mode-active")
+    
+    // Update button visibility
+    editModeBtn.style.display = "none"
+    doneEditingBtn.style.display = "block"
+    deleteBookmarksBtn.style.display = "none"
+    addBookmarkBtn.style.display = "none"
+    importBookmarksBtn.style.display = "none"
+    
+    // Re-render bookmarks with drag handlers
+    renderBookmarks(allBookmarks)
+  }
+
+  // Exit edit mode
+  function exitEditMode() {
+    isEditMode = false
+    document.body.classList.remove("edit-mode")
+    bookmarksContainer.classList.remove("edit-mode-active")
+    
+    // Update button visibility
+    editModeBtn.style.display = "block"
+    doneEditingBtn.style.display = "none"
+    deleteBookmarksBtn.style.display = "block"
+    addBookmarkBtn.style.display = "block"
+    importBookmarksBtn.style.display = "block"
+    
+    // Save the new order
+    saveBookmarkOrder()
+    
+    // Re-render bookmarks without drag handlers
+    renderBookmarks(allBookmarks)
+  }
+
+  // Save bookmark order to storage
+  function saveBookmarkOrder() {
+    const bookmarkOrder = allBookmarks.map(b => b.id)
+    chrome.storage.local.set({ bookmarkOrder: bookmarkOrder })
+  }
+
+  // Load saved bookmark order and reorder bookmarks accordingly
+  function applyBookmarkOrder(bookmarks) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["bookmarkOrder"], (result) => {
+        if (result.bookmarkOrder && result.bookmarkOrder.length > 0) {
+          const orderMap = new Map()
+          result.bookmarkOrder.forEach((id, index) => {
+            orderMap.set(id, index)
+          })
+          
+          // Sort bookmarks based on saved order
+          // Bookmarks not in the order list will be placed at the end
+          bookmarks.sort((a, b) => {
+            const orderA = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity
+            const orderB = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity
+            return orderA - orderB
+          })
+        }
+        resolve(bookmarks)
+      })
+    })
+  }
+
+  // Drag and drop handlers
+  let dropPosition = 'after' // Track if dropping before or after target
+  
+  function handleDragStart(e, bookmark) {
+    if (!isEditMode) return
+    
+    draggedElement = e.target.closest('.bookmark-item')
+    draggedBookmarkId = bookmark.id
+    
+    // Small delay to allow the drag image to be captured before adding dragging class
+    setTimeout(() => {
+      draggedElement.classList.add('dragging')
+    }, 0)
+    
+    // Set drag data
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', bookmark.id)
+    
+    // Create a custom drag image
+    const dragImage = draggedElement.cloneNode(true)
+    dragImage.style.position = 'absolute'
+    dragImage.style.top = '-1000px'
+    dragImage.classList.remove('dragging')
+    document.body.appendChild(dragImage)
+    e.dataTransfer.setDragImage(dragImage, 30, 30)
+    setTimeout(() => document.body.removeChild(dragImage), 0)
+  }
+
+  function handleDragEnd(e) {
+    if (!isEditMode) return
+    
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging')
+    }
+    
+    // Remove all drag indicator classes from all items
+    document.querySelectorAll('.bookmark-item').forEach(item => {
+      item.classList.remove('drag-over-left', 'drag-over-right')
+    })
+    
+    draggedElement = null
+    draggedBookmarkId = null
+  }
+
+  function handleDragOver(e) {
+    if (!isEditMode) return
+    
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    
+    const targetElement = e.target.closest('.bookmark-item')
+    if (targetElement && targetElement !== draggedElement) {
+      // Calculate mouse position relative to target element
+      const rect = targetElement.getBoundingClientRect()
+      const mouseX = e.clientX
+      const elementCenterX = rect.left + rect.width / 2
+      
+      // Remove all indicators from all items first
+      document.querySelectorAll('.bookmark-item').forEach(item => {
+        item.classList.remove('drag-over-left', 'drag-over-right')
+      })
+      
+      // Add indicator based on mouse position (left or right half)
+      if (mouseX < elementCenterX) {
+        targetElement.classList.add('drag-over-left')
+        dropPosition = 'before'
+      } else {
+        targetElement.classList.add('drag-over-right')
+        dropPosition = 'after'
+      }
+    }
+  }
+
+  function handleDragLeave(e) {
+    if (!isEditMode) return
+    
+    const targetElement = e.target.closest('.bookmark-item')
+    if (targetElement) {
+      // Only remove if we're actually leaving the element (not entering a child)
+      const relatedTarget = e.relatedTarget
+      if (!targetElement.contains(relatedTarget)) {
+        targetElement.classList.remove('drag-over-left', 'drag-over-right')
+      }
+    }
+  }
+
+  function handleDrop(e) {
+    if (!isEditMode) return
+    
+    e.preventDefault()
+    
+    const targetElement = e.target.closest('.bookmark-item')
+    if (!targetElement || targetElement === draggedElement) {
+      return
+    }
+    
+    const targetBookmarkId = targetElement.dataset.id
+    
+    // Find indices
+    const draggedIndex = allBookmarks.findIndex(b => b.id === draggedBookmarkId)
+    let targetIndex = allBookmarks.findIndex(b => b.id === targetBookmarkId)
+    
+    if (draggedIndex === -1 || targetIndex === -1) return
+    
+    // Remove the dragged item first
+    const [draggedBookmark] = allBookmarks.splice(draggedIndex, 1)
+    
+    // Recalculate target index after removal
+    targetIndex = allBookmarks.findIndex(b => b.id === targetBookmarkId)
+    
+    // Insert at the correct position based on drop indicator
+    if (dropPosition === 'after') {
+      allBookmarks.splice(targetIndex + 1, 0, draggedBookmark)
+    } else {
+      allBookmarks.splice(targetIndex, 0, draggedBookmark)
+    }
+    
+    // Remove drag indicator classes
+    targetElement.classList.remove('drag-over-left', 'drag-over-right')
+    
+    // Re-render with new order
     renderBookmarks(allBookmarks)
   }
 
@@ -541,6 +762,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cancel selection mode
   cancelSelectionBtn.addEventListener("click", () => {
     exitSelectionMode()
+  })
+
+  // Edit mode button
+  editModeBtn.addEventListener("click", () => {
+    enterEditMode()
+  })
+
+  // Done editing button
+  doneEditingBtn.addEventListener("click", () => {
+    exitEditMode()
   })
 
   // Context menu edit option
