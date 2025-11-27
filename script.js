@@ -69,11 +69,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
           const favicon = document.createElement("img")
           favicon.className = "most-visited-icon"
-          favicon.src = getFaviconUrl(site.url)
           favicon.alt = site.title
-          favicon.onerror = () => {
-            favicon.src = "icons/default-favicon.png"
-          }
+          favicon.src = "icons/default-favicon.svg" // Start with default
+          // Load favicon with fallback system
+          loadFaviconWithFallback(favicon, site.url)
 
           // Use custom name if available, otherwise use original title
           const displayTitle = customNames[site.url] || site.title || extractDomain(site.url)
@@ -198,14 +197,110 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Get favicon for a URL
-  function getFaviconUrl(url) {
+  // Cache for favicon URLs that work
+  const faviconCache = new Map();
+
+  // Get all possible favicon sources for a URL
+  function getAllFaviconSources(url) {
     try {
-      const domain = new URL(url).origin
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
+      const origin = urlObj.origin;
+      const encodedUrl = encodeURIComponent(url);
+      
+      return [
+        // Chrome's internal favicon API (MV3) - same as native bookmarks
+        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodedUrl}&size=64`,
+        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodedUrl}&size=32`,
+        // Google's favicon services (very reliable)
+        `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
+        `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`,
+        `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+        // Google's T2 service with full URL support
+        `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodedUrl}&size=128`,
+        `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodedUrl}&size=64`,
+        // DuckDuckGo favicon service
+        `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
+        // Direct favicon URLs from the website
+        `${origin}/favicon.ico`,
+        `${origin}/apple-touch-icon.png`,
+        `${origin}/apple-touch-icon-precomposed.png`,
+        `${origin}/favicon-32x32.png`,
+        `${origin}/favicon-16x16.png`,
+      ];
     } catch (e) {
-      return "icons/default-favicon.png"
+      return [];
     }
+  }
+
+  // Load favicon by racing all sources - first one to load wins
+  async function loadFaviconWithFallback(imgElement, url) {
+    // Check memory cache first
+    if (faviconCache.has(url)) {
+      imgElement.src = faviconCache.get(url);
+      return;
+    }
+
+    const sources = getAllFaviconSources(url);
+    if (sources.length === 0) {
+      imgElement.src = "icons/default-favicon.svg";
+      return;
+    }
+
+    // Race all sources - first valid one wins
+    const result = await raceForValidFavicon(sources);
+    if (result) {
+      imgElement.src = result;
+      faviconCache.set(url, result);
+    } else {
+      imgElement.src = "icons/default-favicon.svg";
+    }
+  }
+
+  // Race all favicon sources and return the first one that loads successfully
+  function raceForValidFavicon(sources) {
+    return new Promise((resolve) => {
+      let resolved = false;
+      let failedCount = 0;
+      const total = sources.length;
+
+      // Helper to handle completion
+      const handleResult = (success, src) => {
+        if (resolved) return;
+        
+        if (success) {
+          resolved = true;
+          resolve(src);
+        } else {
+          failedCount++;
+          if (failedCount >= total) {
+            resolve(null);
+          }
+        }
+      };
+
+      // Start loading all sources simultaneously
+      sources.forEach((src) => {
+        const img = new Image();
+        
+        img.onload = () => {
+          // Verify it's a real image, not a 1x1 placeholder
+          const isValid = img.naturalWidth > 2 && img.naturalHeight > 2;
+          handleResult(isValid, src);
+        };
+        
+        img.onerror = () => handleResult(false, src);
+        
+        img.src = src;
+      });
+
+      // Timeout fallback after 5 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolve(null);
+        }
+      }, 5000);
+    });
   }
 
   // Render bookmarks to the page
@@ -224,11 +319,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const favicon = document.createElement("img")
       favicon.className = "bookmark-icon"
-      favicon.src = getFaviconUrl(bookmark.url)
       favicon.alt = bookmark.title
-      favicon.onerror = () => {
-        favicon.src = "icons/default-favicon.png"
-      }
+      favicon.src = "icons/default-favicon.svg" // Start with default
+      // Load favicon with fallback system
+      loadFaviconWithFallback(favicon, bookmark.url)
 
       const tooltip = document.createElement("div")
       tooltip.className = "bookmark-tooltip"

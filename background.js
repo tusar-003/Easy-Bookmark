@@ -1,88 +1,73 @@
-// Function to fetch an image and convert it to a Data URL
-async function imageToDataUrl(url) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-    }
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    // If the initial fetch fails, try fetching with a no-cors header as a fallback
-    // This is less reliable but can sometimes get around CORS issues for public favicons
-    const noCorsResponse = await fetch(url, { mode: 'no-cors' });
-    if (!noCorsResponse.ok) {
-        throw new Error(`Failed to fetch image with no-cors fallback: ${noCorsResponse.status}`);
-    }
-    const blob = await noCorsResponse.blob();
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-  }
-}
+// Background service worker for Easy Bookmarks
+// This script handles favicon caching using reliable external services
 
-// Function to find the best favicon URL from a webpage
-async function findFaviconUrl(pageUrl) {
-  const response = await fetch(pageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch page: ${response.status}`);
-  }
-  const html = await response.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+// List of favicon services to try (in order of reliability)
+const FAVICON_SERVICES = [
+  (hostname) => `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
+  (hostname) => `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${hostname}&size=128`,
+  (hostname) => `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
+];
 
-  const selectors = [
-    'link[rel="apple-touch-icon"]',
-    'link[rel="icon"][sizes="192x192"]',
-    'link[rel="icon"][sizes="128x128"]',
-    'link[rel="shortcut icon"]',
-    'link[rel="icon"]'
-  ];
-
-  for (const selector of selectors) {
-    const linkElement = doc.querySelector(selector);
-    if (linkElement) {
-      return new URL(linkElement.getAttribute('href'), pageUrl).href;
-    }
-  }
-
-  return new URL('/favicon.ico', pageUrl).href;
-}
-
-// Main function to find and store the favicon
-async function findAndStoreFavicon(bookmark) {
+// Fetch and cache favicon for a bookmark
+async function cacheFavicon(bookmark) {
   if (!bookmark.url || !bookmark.url.startsWith('http')) {
     return;
   }
 
   try {
-    const faviconUrl = await findFaviconUrl(bookmark.url);
-    const dataUrl = await imageToDataUrl(faviconUrl);
+    const url = new URL(bookmark.url);
+    const hostname = url.hostname;
+    const key = `favicon-${bookmark.id}`;
 
-    const storageItem = {};
-    storageItem[`favicon-${bookmark.id}`] = dataUrl;
-    chrome.storage.local.set(storageItem);
-
-  } catch (error) {
-    // Do not log CORS errors as they are very common and not true failures
-    if (!error.message.includes('CORS')) {
-        console.warn(`Could not process favicon for ${bookmark.url}:`, error);
+    // Check if we already have a cached version
+    const existing = await chrome.storage.local.get(key);
+    if (existing[key]) {
+      return; // Already cached
     }
+
+    // Try each favicon service
+    for (const getUrl of FAVICON_SERVICES) {
+      try {
+        const faviconUrl = getUrl(hostname);
+        const response = await fetch(faviconUrl);
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          
+          // Only cache if it's a valid image with content
+          if (blob.size > 100) {
+            const dataUrl = await blobToDataUrl(blob);
+            await chrome.storage.local.set({ [key]: dataUrl });
+            return;
+          }
+        }
+      } catch (e) {
+        // Continue to next service
+      }
+    }
+  } catch (error) {
+    // Silently fail - the UI will use fallback services
   }
 }
 
-// Function to refresh favicons for all existing bookmarks
+// Convert blob to data URL
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Refresh favicons for all bookmarks (runs in background)
 async function refreshAllFavicons() {
-  chrome.storage.local.set({ favicon_scan_status: 'Scanning...' });
-  chrome.bookmarks.getTree(async (bookmarkTreeNodes) => {
+  try {
+    chrome.storage.local.set({ favicon_scan_status: 'Scanning...' });
+    
+    const bookmarkTreeNodes = await chrome.bookmarks.getTree();
     const bookmarks = [];
+    
     function extractBookmarks(nodes) {
       for (const node of nodes) {
         if (node.children) {
@@ -95,36 +80,55 @@ async function refreshAllFavicons() {
     extractBookmarks(bookmarkTreeNodes);
 
     let processed = 0;
-    for (const bookmark of bookmarks) {
-      const key = `favicon-${bookmark.id}`;
-      const result = await chrome.storage.local.get(key);
-      if (!result[key]) {
-        await findAndStoreFavicon(bookmark);
-      }
-      processed++;
-      chrome.storage.local.set({ favicon_scan_status: `Scanned ${processed} of ${bookmarks.length} bookmarks.` });
+    const total = bookmarks.length;
+    
+    // Process in batches to avoid overwhelming the system
+    const batchSize = 5;
+    for (let i = 0; i < bookmarks.length; i += batchSize) {
+      const batch = bookmarks.slice(i, i + batchSize);
+      await Promise.all(batch.map(bookmark => cacheFavicon(bookmark)));
+      processed += batch.length;
+      chrome.storage.local.set({ 
+        favicon_scan_status: `Scanned ${processed} of ${total} bookmarks.` 
+      });
     }
+    
     chrome.storage.local.set({ favicon_scan_status: 'Scan complete.' });
-  });
+  } catch (error) {
+    console.error('Error refreshing favicons:', error);
+    chrome.storage.local.set({ favicon_scan_status: 'Scan failed.' });
+  }
 }
 
-// Listeners
+// Listeners for bookmark events
 chrome.bookmarks.onCreated.addListener((id, bookmark) => {
-  findAndStoreFavicon({ ...bookmark, id });
+  cacheFavicon({ ...bookmark, id });
 });
 
 chrome.bookmarks.onChanged.addListener((id, changeInfo) => {
   if (changeInfo.url) {
     chrome.bookmarks.get(id, (bookmarks) => {
       if (bookmarks && bookmarks.length > 0) {
-        findAndStoreFavicon(bookmarks[0]);
+        // Clear old cache and fetch new
+        chrome.storage.local.remove(`favicon-${id}`);
+        cacheFavicon(bookmarks[0]);
       }
     });
   }
 });
 
+// Run favicon refresh on install/update
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install' || details.reason === 'update') {
     refreshAllFavicons();
   }
+});
+
+// Listen for manual refresh requests from the UI
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'refreshFavicons') {
+    refreshAllFavicons();
+    sendResponse({ status: 'started' });
+  }
+  return true;
 });

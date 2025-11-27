@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Easy Bookmarks",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Display all bookmarks as icons on new tab page",
-  "permissions": ["bookmarks", "storage", "topSites", "history"],
+  "permissions": ["bookmarks", "storage", "topSites", "history", "favicon"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
