@@ -312,18 +312,15 @@ input:checked + .slider:before {
 
 /* Bookmark Groups Section */
 .bookmark-groups-section {
-  margin-bottom: 20px;
-  padding-bottom: 15px;
+  margin-bottom: 15px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .bookmark-groups-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
-  background-color: var(--most-visited-bg);
-  padding: 15px;
-  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* Bookmark Group Styles - Large Cards */
