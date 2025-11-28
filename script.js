@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   const bookmarksContainer = document.getElementById("bookmarksContainer")
   const mostVisitedContainer = document.getElementById("mostVisitedContainer")
+  const bookmarkGroupsContainer = document.getElementById("bookmarkGroupsContainer")
+  const bookmarkGroupsSection = document.getElementById("bookmarkGroupsSection")
   const searchInput = document.getElementById("searchInput")
   const themeToggle = document.getElementById("themeToggle")
   const addBookmarkBtn = document.getElementById("addBookmarkBtn")
@@ -366,7 +368,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const isFiltering = bookmarks !== allBookmarks && bookmarks.length !== allBookmarks.length
     
     if (isFiltering) {
-      // When filtering, show only the filtered bookmarks without groups
+      // When filtering, hide groups section and show only filtered bookmarks
+      bookmarkGroupsSection.style.display = "none"
+      
       if (bookmarks.length === 0) {
         bookmarksContainer.innerHTML = '<div class="loading">No bookmarks found</div>'
         return
@@ -377,24 +381,42 @@ document.addEventListener("DOMContentLoaded", () => {
         renderBookmarkItem({ ...bookmark, type: 'bookmark' })
       })
     } else {
-      // Build display items (groups + ungrouped bookmarks)
-      displayItems = buildDisplayItems()
+      // Render groups in their dedicated section
+      renderGroups()
       
-      if (displayItems.length === 0) {
-        bookmarksContainer.innerHTML = '<div class="loading">No bookmarks found</div>'
+      // Get ungrouped bookmarks only
+      const groupedBookmarkIds = new Set()
+      bookmarkGroups.forEach(group => {
+        group.bookmarkIds.forEach(id => groupedBookmarkIds.add(id))
+      })
+      const ungroupedBookmarks = allBookmarks.filter(b => !groupedBookmarkIds.has(b.id))
+      
+      if (ungroupedBookmarks.length === 0) {
+        bookmarksContainer.innerHTML = '<div class="loading">No ungrouped bookmarks</div>'
         return
       }
 
       bookmarksContainer.innerHTML = ""
 
-      displayItems.forEach((item) => {
-        if (item.type === 'group') {
-          renderGroup(item)
-        } else {
-          renderBookmarkItem(item)
-        }
+      ungroupedBookmarks.forEach((bookmark) => {
+        renderBookmarkItem({ ...bookmark, type: 'bookmark' })
       })
     }
+  }
+
+  // Render groups in their dedicated section
+  function renderGroups() {
+    if (bookmarkGroups.length === 0) {
+      bookmarkGroupsSection.style.display = "none"
+      return
+    }
+    
+    bookmarkGroupsSection.style.display = "block"
+    bookmarkGroupsContainer.innerHTML = ""
+    
+    bookmarkGroups.forEach((group) => {
+      renderGroup(group)
+    })
   }
 
   // Build display items array combining groups and ungrouped bookmarks
@@ -524,7 +546,7 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = previewBookmarks.length; i < 4; i++) {
       const placeholder = document.createElement("div")
       placeholder.style.backgroundColor = "var(--border-color)"
-      placeholder.style.borderRadius = "2px"
+      placeholder.style.borderRadius = "4px"
       groupIcon.appendChild(placeholder)
     }
     
@@ -534,12 +556,13 @@ document.addEventListener("DOMContentLoaded", () => {
     countBadge.textContent = group.bookmarkIds.length
     groupIcon.appendChild(countBadge)
 
-    const tooltip = document.createElement("div")
-    tooltip.className = "bookmark-tooltip"
-    tooltip.textContent = group.name
+    // Add visible group name label
+    const groupName = document.createElement("div")
+    groupName.className = "bookmark-group-name"
+    groupName.textContent = group.name
 
     groupElement.appendChild(groupIcon)
-    groupElement.appendChild(tooltip)
+    groupElement.appendChild(groupName)
 
     // Add drag and drop for edit mode
     if (isEditMode) {
@@ -577,7 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
       groupContextMenu.classList.add("active")
     })
 
-    bookmarksContainer.appendChild(groupElement)
+    bookmarkGroupsContainer.appendChild(groupElement)
   }
 
   // Expand a group to show its bookmarks
