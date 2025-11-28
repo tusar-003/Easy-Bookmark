@@ -19,16 +19,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const cancelSelectionBtn = document.getElementById("cancelSelectionBtn")
   const editModeBtn = document.getElementById("editModeBtn")
   const doneEditingBtn = document.getElementById("doneEditingBtn")
+  const groupContextMenu = document.getElementById("groupContextMenu")
+  const editGroupModal = document.getElementById("editGroupModal")
+  const editGroupForm = document.getElementById("editGroupForm")
 
   let allBookmarks = []
+  let bookmarkGroups = [] // Array to store groups: { id, name, bookmarkIds: [] }
+  let displayItems = [] // Combined array of bookmarks and groups for rendering
   let mostVisitedSites = []
   let isSelectionMode = false
   let isEditMode = false
   const selectedBookmarks = new Set()
   let rightClickedBookmark = null
   let rightClickedMostVisited = null
+  let rightClickedGroup = null
   let draggedElement = null
   let draggedBookmarkId = null
+  let draggedGroupId = null
+  let expandedGroup = null
+  let dragOverTimeout = null
 
   // Load theme preference from storage and apply it
   function applyTheme() {
@@ -178,10 +187,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Apply saved order
       await applyBookmarkOrder(allBookmarks)
+      
+      // Load groups
+      await loadGroups()
+      
+      // Clean up groups - remove bookmarks that no longer exist
+      cleanupGroups()
 
       // Render the bookmarks
       renderBookmarks(allBookmarks)
     })
+  }
+  
+  // Clean up groups - remove references to deleted bookmarks
+  function cleanupGroups() {
+    const bookmarkIds = new Set(allBookmarks.map(b => b.id))
+    let changed = false
+    
+    bookmarkGroups.forEach(group => {
+      const validIds = group.bookmarkIds.filter(id => bookmarkIds.has(id))
+      if (validIds.length !== group.bookmarkIds.length) {
+        group.bookmarkIds = validIds
+        changed = true
+      }
+    })
+    
+    // Remove groups with less than 2 bookmarks
+    const originalLength = bookmarkGroups.length
+    bookmarkGroups = bookmarkGroups.filter(g => g.bookmarkIds.length >= 2)
+    if (bookmarkGroups.length !== originalLength) {
+      changed = true
+    }
+    
+    if (changed) {
+      saveGroups()
+    }
   }
 
   // Process bookmark nodes recursively
@@ -322,88 +362,380 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Render bookmarks to the page
   function renderBookmarks(bookmarks) {
-    if (bookmarks.length === 0) {
-      bookmarksContainer.innerHTML = '<div class="loading">No bookmarks found</div>'
-      return
+    // Check if we're filtering (bookmarks array is different from allBookmarks)
+    const isFiltering = bookmarks !== allBookmarks && bookmarks.length !== allBookmarks.length
+    
+    if (isFiltering) {
+      // When filtering, show only the filtered bookmarks without groups
+      if (bookmarks.length === 0) {
+        bookmarksContainer.innerHTML = '<div class="loading">No bookmarks found</div>'
+        return
+      }
+      
+      bookmarksContainer.innerHTML = ""
+      bookmarks.forEach((bookmark) => {
+        renderBookmarkItem({ ...bookmark, type: 'bookmark' })
+      })
+    } else {
+      // Build display items (groups + ungrouped bookmarks)
+      displayItems = buildDisplayItems()
+      
+      if (displayItems.length === 0) {
+        bookmarksContainer.innerHTML = '<div class="loading">No bookmarks found</div>'
+        return
+      }
+
+      bookmarksContainer.innerHTML = ""
+
+      displayItems.forEach((item) => {
+        if (item.type === 'group') {
+          renderGroup(item)
+        } else {
+          renderBookmarkItem(item)
+        }
+      })
+    }
+  }
+
+  // Build display items array combining groups and ungrouped bookmarks
+  function buildDisplayItems() {
+    // Get all bookmark IDs that are in groups
+    const groupedBookmarkIds = new Set()
+    bookmarkGroups.forEach(group => {
+      group.bookmarkIds.forEach(id => groupedBookmarkIds.add(id))
+    })
+    
+    // Get ungrouped bookmarks
+    const ungroupedBookmarks = allBookmarks.filter(b => !groupedBookmarkIds.has(b.id))
+    
+    // Combine groups and ungrouped bookmarks
+    const allItems = [
+      ...bookmarkGroups.map(g => ({ ...g, type: 'group' })),
+      ...ungroupedBookmarks.map(b => ({ ...b, type: 'bookmark' }))
+    ]
+    
+    return allItems
+  }
+
+  // Render a single bookmark item
+  function renderBookmarkItem(bookmark, container = bookmarksContainer) {
+    const bookmarkElement = document.createElement("div")
+    bookmarkElement.className = "bookmark-item"
+    bookmarkElement.dataset.id = bookmark.id
+    bookmarkElement.dataset.type = "bookmark"
+
+    const favicon = document.createElement("img")
+    favicon.className = "bookmark-icon"
+    favicon.alt = bookmark.title
+    favicon.src = "icons/default-favicon.svg"
+    loadFaviconWithFallback(favicon, bookmark.url)
+
+    const tooltip = document.createElement("div")
+    tooltip.className = "bookmark-tooltip"
+    tooltip.textContent = bookmark.title
+
+    bookmarkElement.appendChild(favicon)
+    bookmarkElement.appendChild(tooltip)
+
+    // Add checkbox for selection mode
+    if (isSelectionMode) {
+      const checkbox = document.createElement("div")
+      checkbox.className = "bookmark-checkbox"
+      if (selectedBookmarks.has(bookmark.id)) {
+        checkbox.classList.add("selected")
+        bookmarkElement.classList.add("selected")
+      }
+      bookmarkElement.appendChild(checkbox)
     }
 
-    bookmarksContainer.innerHTML = ""
+    // Add drag and drop attributes for edit mode
+    if (isEditMode) {
+      bookmarkElement.setAttribute('draggable', 'true')
+      
+      bookmarkElement.addEventListener('dragstart', (e) => handleDragStart(e, bookmark, 'bookmark'))
+      bookmarkElement.addEventListener('dragend', handleDragEnd)
+      bookmarkElement.addEventListener('dragover', handleDragOver)
+      bookmarkElement.addEventListener('dragleave', handleDragLeave)
+      bookmarkElement.addEventListener('drop', handleDrop)
+    }
 
-    bookmarks.forEach((bookmark) => {
-      const bookmarkElement = document.createElement("div")
-      bookmarkElement.className = "bookmark-item"
-      bookmarkElement.dataset.id = bookmark.id
-
-      const favicon = document.createElement("img")
-      favicon.className = "bookmark-icon"
-      favicon.alt = bookmark.title
-      favicon.src = "icons/default-favicon.svg" // Start with default
-      // Load favicon with fallback system
-      loadFaviconWithFallback(favicon, bookmark.url)
-
-      const tooltip = document.createElement("div")
-      tooltip.className = "bookmark-tooltip"
-      tooltip.textContent = bookmark.title // Only show the title in tooltip, not URL
-
-      bookmarkElement.appendChild(favicon)
-      bookmarkElement.appendChild(tooltip)
-
-      // Add checkbox for selection mode
+    // Handle click event based on mode
+    bookmarkElement.addEventListener("click", (e) => {
       if (isSelectionMode) {
-        const checkbox = document.createElement("div")
-        checkbox.className = "bookmark-checkbox"
-        if (selectedBookmarks.has(bookmark.id)) {
-          checkbox.classList.add("selected")
-          bookmarkElement.classList.add("selected")
-        }
-        bookmarkElement.appendChild(checkbox)
-      }
-
-      // Add drag and drop attributes for edit mode
-      if (isEditMode) {
-        bookmarkElement.setAttribute('draggable', 'true')
-        
-        bookmarkElement.addEventListener('dragstart', (e) => handleDragStart(e, bookmark))
-        bookmarkElement.addEventListener('dragend', handleDragEnd)
-        bookmarkElement.addEventListener('dragover', handleDragOver)
-        bookmarkElement.addEventListener('dragleave', handleDragLeave)
-        bookmarkElement.addEventListener('drop', handleDrop)
-      }
-
-      // Handle click event based on mode
-      bookmarkElement.addEventListener("click", (e) => {
-        if (isSelectionMode) {
-          e.preventDefault()
-          toggleBookmarkSelection(bookmark.id, bookmarkElement)
-        } else if (isEditMode) {
-          // In edit mode, clicking doesn't navigate
-          e.preventDefault()
-        } else {
-          window.location.href = bookmark.url
-        }
-      })
-
-      // Add context menu on right click (disabled in edit mode)
-      bookmarkElement.addEventListener("contextmenu", (e) => {
-        if (isEditMode) {
-          e.preventDefault()
-          return
-        }
         e.preventDefault()
-        rightClickedBookmark = bookmark
-        rightClickedMostVisited = null
+        toggleBookmarkSelection(bookmark.id, bookmarkElement)
+      } else if (isEditMode) {
+        e.preventDefault()
+      } else {
+        window.location.href = bookmark.url
+      }
+    })
 
-        // Position and show context menu
-        contextMenu.style.left = `${e.pageX}px`
-        contextMenu.style.top = `${e.pageY}px`
-        contextMenu.classList.add("active")
-        
-        // Show appropriate context menu items
-        document.getElementById("contextMenuEdit").textContent = "Edit Bookmark"
-        document.getElementById("contextMenuDelete").textContent = "Delete Bookmark"
+    // Add context menu on right click
+    bookmarkElement.addEventListener("contextmenu", (e) => {
+      if (isEditMode) {
+        e.preventDefault()
+        return
+      }
+      e.preventDefault()
+      rightClickedBookmark = bookmark
+      rightClickedMostVisited = null
+      rightClickedGroup = null
+
+      contextMenu.style.left = `${e.pageX}px`
+      contextMenu.style.top = `${e.pageY}px`
+      contextMenu.classList.add("active")
+      
+      document.getElementById("contextMenuEdit").textContent = "Edit Bookmark"
+      document.getElementById("contextMenuDelete").textContent = "Delete Bookmark"
+      
+      // Show "Remove from Group" option if bookmark is in a group
+      const isInGroup = bookmarkGroups.some(g => g.bookmarkIds.includes(bookmark.id))
+      document.getElementById("contextMenuRemoveFromGroup").style.display = isInGroup ? "block" : "none"
+    })
+
+    container.appendChild(bookmarkElement)
+  }
+
+  // Render a group
+  function renderGroup(group) {
+    const groupElement = document.createElement("div")
+    groupElement.className = "bookmark-group"
+    groupElement.dataset.id = group.id
+    groupElement.dataset.type = "group"
+
+    // Create group icon with preview of bookmarks
+    const groupIcon = document.createElement("div")
+    groupIcon.className = "bookmark-group-icon"
+    
+    // Get first 4 bookmarks in group for preview
+    const previewBookmarks = group.bookmarkIds.slice(0, 4).map(id => 
+      allBookmarks.find(b => b.id === id)
+    ).filter(Boolean)
+    
+    previewBookmarks.forEach(bookmark => {
+      const favicon = document.createElement("img")
+      favicon.src = "icons/default-favicon.svg"
+      loadFaviconWithFallback(favicon, bookmark.url)
+      groupIcon.appendChild(favicon)
+    })
+    
+    // Fill empty slots
+    for (let i = previewBookmarks.length; i < 4; i++) {
+      const placeholder = document.createElement("div")
+      placeholder.style.backgroundColor = "var(--border-color)"
+      placeholder.style.borderRadius = "2px"
+      groupIcon.appendChild(placeholder)
+    }
+    
+    // Add count badge
+    const countBadge = document.createElement("span")
+    countBadge.className = "group-count"
+    countBadge.textContent = group.bookmarkIds.length
+    groupIcon.appendChild(countBadge)
+
+    const tooltip = document.createElement("div")
+    tooltip.className = "bookmark-tooltip"
+    tooltip.textContent = group.name
+
+    groupElement.appendChild(groupIcon)
+    groupElement.appendChild(tooltip)
+
+    // Add drag and drop for edit mode
+    if (isEditMode) {
+      groupElement.setAttribute('draggable', 'true')
+      
+      groupElement.addEventListener('dragstart', (e) => handleDragStart(e, group, 'group'))
+      groupElement.addEventListener('dragend', handleDragEnd)
+      groupElement.addEventListener('dragover', handleDragOver)
+      groupElement.addEventListener('dragleave', handleDragLeave)
+      groupElement.addEventListener('drop', handleDrop)
+    }
+
+    // Click to expand group
+    groupElement.addEventListener("click", (e) => {
+      if (isEditMode) {
+        e.preventDefault()
+        return
+      }
+      expandGroup(group)
+    })
+
+    // Context menu for group
+    groupElement.addEventListener("contextmenu", (e) => {
+      if (isEditMode) {
+        e.preventDefault()
+        return
+      }
+      e.preventDefault()
+      rightClickedGroup = group
+      rightClickedBookmark = null
+      rightClickedMostVisited = null
+
+      groupContextMenu.style.left = `${e.pageX}px`
+      groupContextMenu.style.top = `${e.pageY}px`
+      groupContextMenu.classList.add("active")
+    })
+
+    bookmarksContainer.appendChild(groupElement)
+  }
+
+  // Expand a group to show its bookmarks
+  function expandGroup(group) {
+    expandedGroup = group
+    
+    const overlay = document.createElement("div")
+    overlay.className = "group-overlay"
+    overlay.id = "groupOverlay"
+    
+    const expanded = document.createElement("div")
+    expanded.className = "group-expanded"
+    
+    const header = document.createElement("div")
+    header.className = "group-expanded-header"
+    
+    const title = document.createElement("span")
+    title.className = "group-expanded-title"
+    title.textContent = group.name
+    title.addEventListener("click", () => {
+      openEditGroupModal(group)
+    })
+    
+    const closeBtn = document.createElement("span")
+    closeBtn.className = "group-expanded-close"
+    closeBtn.innerHTML = "&times;"
+    closeBtn.addEventListener("click", closeGroupOverlay)
+    
+    header.appendChild(title)
+    header.appendChild(closeBtn)
+    
+    const content = document.createElement("div")
+    content.className = "group-expanded-content"
+    
+    // Render bookmarks in group
+    group.bookmarkIds.forEach(bookmarkId => {
+      const bookmark = allBookmarks.find(b => b.id === bookmarkId)
+      if (bookmark) {
+        renderBookmarkItem(bookmark, content)
+      }
+    })
+    
+    expanded.appendChild(header)
+    expanded.appendChild(content)
+    overlay.appendChild(expanded)
+    
+    // Close on overlay click
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        closeGroupOverlay()
+      }
+    })
+    
+    document.body.appendChild(overlay)
+  }
+
+  // Close group overlay
+  function closeGroupOverlay() {
+    const overlay = document.getElementById("groupOverlay")
+    if (overlay) {
+      overlay.remove()
+    }
+    expandedGroup = null
+  }
+
+  // Open edit group modal
+  function openEditGroupModal(group) {
+    document.getElementById("editGroupName").value = group.name
+    document.getElementById("editGroupId").value = group.id
+    openModal(editGroupModal)
+  }
+
+  // Create a new group from two bookmarks
+  function createGroup(bookmark1Id, bookmark2Id) {
+    const groupId = `group-${Date.now()}`
+    const newGroup = {
+      id: groupId,
+      name: "New Group",
+      bookmarkIds: [bookmark1Id, bookmark2Id]
+    }
+    
+    bookmarkGroups.push(newGroup)
+    saveGroups()
+    renderBookmarks(allBookmarks)
+    
+    // Open rename modal for the new group
+    setTimeout(() => {
+      openEditGroupModal(newGroup)
+    }, 100)
+  }
+
+  // Add bookmark to existing group
+  function addToGroup(groupId, bookmarkId) {
+    const group = bookmarkGroups.find(g => g.id === groupId)
+    if (group && !group.bookmarkIds.includes(bookmarkId)) {
+      group.bookmarkIds.push(bookmarkId)
+      saveGroups()
+      renderBookmarks(allBookmarks)
+    }
+  }
+
+  // Remove bookmark from group
+  function removeFromGroup(bookmarkId) {
+    bookmarkGroups.forEach(group => {
+      const index = group.bookmarkIds.indexOf(bookmarkId)
+      if (index !== -1) {
+        group.bookmarkIds.splice(index, 1)
+      }
+    })
+    
+    // Remove groups with less than 2 bookmarks (auto-ungroup single items)
+    bookmarkGroups = bookmarkGroups.filter(g => g.bookmarkIds.length >= 2)
+    
+    saveGroups()
+    renderBookmarks(allBookmarks)
+  }
+
+  // Ungroup - move all bookmarks out of group
+  function ungroupBookmarks(groupId) {
+    bookmarkGroups = bookmarkGroups.filter(g => g.id !== groupId)
+    saveGroups()
+    renderBookmarks(allBookmarks)
+  }
+
+  // Delete group and optionally its bookmarks
+  function deleteGroup(groupId, deleteBookmarks = false) {
+    const group = bookmarkGroups.find(g => g.id === groupId)
+    if (!group) return
+    
+    if (deleteBookmarks) {
+      // Delete all bookmarks in the group
+      group.bookmarkIds.forEach(bookmarkId => {
+        chrome.bookmarks.remove(bookmarkId, () => {
+          if (chrome.runtime.lastError) {
+            console.error("Error deleting bookmark:", chrome.runtime.lastError)
+          }
+        })
+        allBookmarks = allBookmarks.filter(b => b.id !== bookmarkId)
       })
+    }
+    
+    bookmarkGroups = bookmarkGroups.filter(g => g.id !== groupId)
+    saveGroups()
+    renderBookmarks(allBookmarks)
+  }
 
-      bookmarksContainer.appendChild(bookmarkElement)
+  // Save groups to storage
+  function saveGroups() {
+    chrome.storage.local.set({ bookmarkGroups: bookmarkGroups })
+  }
+
+  // Load groups from storage
+  function loadGroups() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["bookmarkGroups"], (result) => {
+        bookmarkGroups = result.bookmarkGroups || []
+        resolve()
+      })
     })
   }
 
@@ -530,21 +862,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Drag and drop handlers
   let dropPosition = 'after' // Track if dropping before or after target
+  let dropAction = 'reorder' // 'reorder' or 'group'
   
-  function handleDragStart(e, bookmark) {
+  function handleDragStart(e, item, type = 'bookmark') {
     if (!isEditMode) return
     
-    draggedElement = e.target.closest('.bookmark-item')
-    draggedBookmarkId = bookmark.id
+    draggedElement = e.target.closest('.bookmark-item, .bookmark-group')
+    if (type === 'bookmark') {
+      draggedBookmarkId = item.id
+      draggedGroupId = null
+    } else {
+      draggedGroupId = item.id
+      draggedBookmarkId = null
+    }
     
     // Small delay to allow the drag image to be captured before adding dragging class
     setTimeout(() => {
-      draggedElement.classList.add('dragging')
+      if (draggedElement) {
+        draggedElement.classList.add('dragging')
+      }
     }, 0)
     
     // Set drag data
     e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', bookmark.id)
+    e.dataTransfer.setData('text/plain', item.id)
+    e.dataTransfer.setData('itemType', type)
     
     // Create a custom drag image
     const dragImage = draggedElement.cloneNode(true)
@@ -564,12 +906,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // Remove all drag indicator classes from all items
-    document.querySelectorAll('.bookmark-item').forEach(item => {
-      item.classList.remove('drag-over-left', 'drag-over-right')
+    document.querySelectorAll('.bookmark-item, .bookmark-group').forEach(item => {
+      item.classList.remove('drag-over-left', 'drag-over-right', 'drag-over-center')
     })
+    
+    // Clear timeout
+    if (dragOverTimeout) {
+      clearTimeout(dragOverTimeout)
+      dragOverTimeout = null
+    }
     
     draggedElement = null
     draggedBookmarkId = null
+    draggedGroupId = null
+    dropAction = 'reorder'
   }
 
   function handleDragOver(e) {
@@ -578,19 +928,44 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     
-    const targetElement = e.target.closest('.bookmark-item')
-    if (targetElement && targetElement !== draggedElement) {
-      // Calculate mouse position relative to target element
-      const rect = targetElement.getBoundingClientRect()
-      const mouseX = e.clientX
-      const elementCenterX = rect.left + rect.width / 2
-      
-      // Remove all indicators from all items first
-      document.querySelectorAll('.bookmark-item').forEach(item => {
-        item.classList.remove('drag-over-left', 'drag-over-right')
-      })
-      
-      // Add indicator based on mouse position (left or right half)
+    const targetElement = e.target.closest('.bookmark-item, .bookmark-group')
+    if (!targetElement || targetElement === draggedElement) return
+    
+    const targetType = targetElement.dataset.type
+    const targetId = targetElement.dataset.id
+    
+    // Calculate mouse position relative to target element
+    const rect = targetElement.getBoundingClientRect()
+    const mouseX = e.clientX
+    const mouseY = e.clientY
+    const elementCenterX = rect.left + rect.width / 2
+    const elementCenterY = rect.top + rect.height / 2
+    
+    // Calculate distance from center
+    const distanceFromCenterX = Math.abs(mouseX - elementCenterX)
+    const distanceFromCenterY = Math.abs(mouseY - elementCenterY)
+    const isNearCenter = distanceFromCenterX < rect.width * 0.25 && distanceFromCenterY < rect.height * 0.25
+    
+    // Remove all indicators from all items first
+    document.querySelectorAll('.bookmark-item, .bookmark-group').forEach(item => {
+      item.classList.remove('drag-over-left', 'drag-over-right', 'drag-over-center')
+    })
+    
+    // If dragging a bookmark near center of another bookmark, show group indicator
+    if (draggedBookmarkId && targetType === 'bookmark' && isNearCenter) {
+      targetElement.classList.add('drag-over-center')
+      dropAction = 'group'
+      dropPosition = 'center'
+    }
+    // If dragging a bookmark onto a group, add to group
+    else if (draggedBookmarkId && targetType === 'group' && isNearCenter) {
+      targetElement.classList.add('drag-over-center')
+      dropAction = 'addToGroup'
+      dropPosition = 'center'
+    }
+    // Otherwise, show reorder indicator
+    else {
+      dropAction = 'reorder'
       if (mouseX < elementCenterX) {
         targetElement.classList.add('drag-over-left')
         dropPosition = 'before'
@@ -604,12 +979,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleDragLeave(e) {
     if (!isEditMode) return
     
-    const targetElement = e.target.closest('.bookmark-item')
+    const targetElement = e.target.closest('.bookmark-item, .bookmark-group')
     if (targetElement) {
-      // Only remove if we're actually leaving the element (not entering a child)
       const relatedTarget = e.relatedTarget
       if (!targetElement.contains(relatedTarget)) {
-        targetElement.classList.remove('drag-over-left', 'drag-over-right')
+        targetElement.classList.remove('drag-over-left', 'drag-over-right', 'drag-over-center')
       }
     }
   }
@@ -619,36 +993,78 @@ document.addEventListener("DOMContentLoaded", () => {
     
     e.preventDefault()
     
-    const targetElement = e.target.closest('.bookmark-item')
+    const targetElement = e.target.closest('.bookmark-item, .bookmark-group')
     if (!targetElement || targetElement === draggedElement) {
       return
     }
     
-    const targetBookmarkId = targetElement.dataset.id
+    const targetType = targetElement.dataset.type
+    const targetId = targetElement.dataset.id
     
-    // Find indices
-    const draggedIndex = allBookmarks.findIndex(b => b.id === draggedBookmarkId)
-    let targetIndex = allBookmarks.findIndex(b => b.id === targetBookmarkId)
-    
-    if (draggedIndex === -1 || targetIndex === -1) return
-    
-    // Remove the dragged item first
-    const [draggedBookmark] = allBookmarks.splice(draggedIndex, 1)
-    
-    // Recalculate target index after removal
-    targetIndex = allBookmarks.findIndex(b => b.id === targetBookmarkId)
-    
-    // Insert at the correct position based on drop indicator
-    if (dropPosition === 'after') {
-      allBookmarks.splice(targetIndex + 1, 0, draggedBookmark)
-    } else {
-      allBookmarks.splice(targetIndex, 0, draggedBookmark)
+    // Handle different drop actions
+    if (dropAction === 'group' && draggedBookmarkId && targetType === 'bookmark') {
+      // Create a new group from two bookmarks
+      createGroup(targetId, draggedBookmarkId)
+    }
+    else if (dropAction === 'addToGroup' && draggedBookmarkId && targetType === 'group') {
+      // Add bookmark to existing group
+      // First remove from any existing group
+      removeFromGroup(draggedBookmarkId)
+      addToGroup(targetId, draggedBookmarkId)
+    }
+    else if (dropAction === 'reorder') {
+      // Reorder items
+      handleReorder(targetId, targetType)
     }
     
     // Remove drag indicator classes
-    targetElement.classList.remove('drag-over-left', 'drag-over-right')
+    targetElement.classList.remove('drag-over-left', 'drag-over-right', 'drag-over-center')
     
-    // Re-render with new order
+    dropAction = 'reorder'
+  }
+
+  // Handle reordering of items
+  function handleReorder(targetId, targetType) {
+    // Build the display order
+    const displayOrder = []
+    
+    // Get current order from DOM
+    document.querySelectorAll('.bookmark-item, .bookmark-group').forEach(el => {
+      const type = el.dataset.type
+      const id = el.dataset.id
+      if (type === 'group') {
+        displayOrder.push(`group-${id}`)
+      } else {
+        displayOrder.push(id)
+      }
+    })
+    
+    // Find indices
+    const draggedId = draggedGroupId ? `group-${draggedGroupId}` : draggedBookmarkId
+    const targetIdFull = targetType === 'group' ? `group-${targetId}` : targetId
+    
+    const draggedIndex = displayOrder.indexOf(draggedId)
+    let targetIndex = displayOrder.indexOf(targetIdFull)
+    
+    if (draggedIndex === -1 || targetIndex === -1) return
+    
+    // Remove dragged item
+    displayOrder.splice(draggedIndex, 1)
+    
+    // Recalculate target index
+    targetIndex = displayOrder.indexOf(targetIdFull)
+    
+    // Insert at new position
+    if (dropPosition === 'after') {
+      displayOrder.splice(targetIndex + 1, 0, draggedId)
+    } else {
+      displayOrder.splice(targetIndex, 0, draggedId)
+    }
+    
+    // Save the new order
+    chrome.storage.local.set({ displayOrder: displayOrder })
+    
+    // Re-render
     renderBookmarks(allBookmarks)
   }
 
@@ -662,6 +1078,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Remove from our local array
       allBookmarks = allBookmarks.filter((bookmark) => bookmark.id !== bookmarkId)
+      
+      // Remove from any groups
+      bookmarkGroups.forEach(group => {
+        const index = group.bookmarkIds.indexOf(bookmarkId)
+        if (index !== -1) {
+          group.bookmarkIds.splice(index, 1)
+        }
+      })
+      
+      // Remove empty groups
+      bookmarkGroups = bookmarkGroups.filter(g => g.bookmarkIds.length > 0)
+      saveGroups()
+      
       renderBookmarks(allBookmarks)
     })
   }
@@ -825,6 +1254,71 @@ document.addEventListener("DOMContentLoaded", () => {
     contextMenu.classList.remove("active")
   })
 
+  // Context menu remove from group option
+  document.getElementById("contextMenuRemoveFromGroup").addEventListener("click", () => {
+    if (rightClickedBookmark) {
+      removeFromGroup(rightClickedBookmark.id)
+    }
+    contextMenu.classList.remove("active")
+  })
+
+  // Group context menu - rename
+  document.getElementById("groupContextMenuRename").addEventListener("click", () => {
+    if (rightClickedGroup) {
+      openEditGroupModal(rightClickedGroup)
+    }
+    groupContextMenu.classList.remove("active")
+  })
+
+  // Group context menu - ungroup
+  document.getElementById("groupContextMenuUngroup").addEventListener("click", () => {
+    if (rightClickedGroup) {
+      const confirmUngroup = confirm(`Are you sure you want to ungroup "${rightClickedGroup.name}"? The bookmarks will be kept.`)
+      if (confirmUngroup) {
+        ungroupBookmarks(rightClickedGroup.id)
+      }
+    }
+    groupContextMenu.classList.remove("active")
+  })
+
+  // Group context menu - delete
+  document.getElementById("groupContextMenuDelete").addEventListener("click", () => {
+    if (rightClickedGroup) {
+      const deleteOption = confirm(`Delete group "${rightClickedGroup.name}"?\n\nClick OK to delete the group AND its bookmarks.\nClick Cancel to keep the bookmarks.`)
+      if (deleteOption) {
+        deleteGroup(rightClickedGroup.id, true) // Delete group and bookmarks
+      } else {
+        ungroupBookmarks(rightClickedGroup.id) // Just ungroup
+      }
+    }
+    groupContextMenu.classList.remove("active")
+  })
+
+  // Edit group form submission
+  editGroupForm.addEventListener("submit", (e) => {
+    e.preventDefault()
+    
+    const groupId = document.getElementById("editGroupId").value
+    const newName = document.getElementById("editGroupName").value.trim()
+    
+    if (newName) {
+      const group = bookmarkGroups.find(g => g.id === groupId)
+      if (group) {
+        group.name = newName
+        saveGroups()
+        renderBookmarks(allBookmarks)
+        
+        // Update expanded group title if open
+        const expandedTitle = document.querySelector(".group-expanded-title")
+        if (expandedTitle && expandedGroup && expandedGroup.id === groupId) {
+          expandedTitle.textContent = newName
+        }
+      }
+    }
+    
+    closeModal(editGroupModal)
+  })
+
   // Process edit bookmark form submission
   editBookmarkForm.addEventListener("submit", (e) => {
     e.preventDefault()
@@ -865,6 +1359,7 @@ document.addEventListener("DOMContentLoaded", () => {
       closeModal(addBookmarkModal)
       closeModal(editBookmarkModal)
       closeModal(importModal)
+      closeModal(editGroupModal)
       
       // Reset modal title and URL field when closing
       document.querySelector("#editBookmarkModal h2").textContent = "Edit Bookmark"
@@ -887,10 +1382,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (event.target === importModal) {
       closeModal(importModal)
     }
+    if (event.target === editGroupModal) {
+      closeModal(editGroupModal)
+    }
 
-    // Hide context menu when clicking elsewhere
+    // Hide context menus when clicking elsewhere
     if (!event.target.closest("#contextMenu")) {
       contextMenu.classList.remove("active")
+    }
+    if (!event.target.closest("#groupContextMenu")) {
+      groupContextMenu.classList.remove("active")
     }
   })
 

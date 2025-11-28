@@ -310,6 +310,198 @@ input:checked + .slider:before {
   gap: 5px;
 }
 
+/* Bookmark Group Styles */
+.bookmark-group {
+  background-color: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 6px;
+  transition: transform 0.2s, background-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  cursor: pointer;
+  position: relative;
+}
+
+.bookmark-group:hover {
+  transform: translateY(-2px);
+  background-color: var(--hover-color);
+  z-index: 1;
+}
+
+.bookmark-group:hover .bookmark-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-5px);
+}
+
+.bookmark-group-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+  padding: 3px;
+  background-color: var(--hover-color);
+  border-radius: 8px;
+  position: relative;
+}
+
+.bookmark-group-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.bookmark-group-icon .group-count {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background-color: var(--highlight-color);
+  color: white;
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+}
+
+/* Edit mode styles for groups */
+.edit-mode .bookmark-group {
+  cursor: grab;
+  animation: wobble 0.3s ease-in-out infinite alternate;
+}
+
+.edit-mode .bookmark-group:nth-child(even) {
+  animation-delay: 0.15s;
+}
+
+.edit-mode .bookmark-group:active {
+  cursor: grabbing;
+  animation: none;
+}
+
+.bookmark-group.dragging {
+  opacity: 0.4;
+  transform: scale(1.05) rotate(3deg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  animation: none !important;
+}
+
+/* Drop indicator for creating groups */
+.bookmark-item.drag-over-center,
+.bookmark-group.drag-over-center {
+  background-color: var(--highlight-color);
+  transform: scale(1.1);
+  box-shadow: 0 0 15px var(--highlight-color);
+}
+
+/* Group drop indicators */
+.bookmark-group.drag-over-left::before {
+  content: "" !important;
+  position: absolute !important;
+  left: -4px !important;
+  top: 5px !important;
+  bottom: 5px !important;
+  width: 3px !important;
+  height: auto !important;
+  background: var(--highlight-color) !important;
+  border-radius: 2px !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 8px var(--highlight-color);
+  animation: pulse-indicator 0.5s ease-in-out infinite alternate !important;
+}
+
+.bookmark-group.drag-over-right::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  background: var(--highlight-color);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--highlight-color);
+  animation: pulse-indicator 0.5s ease-in-out infinite alternate;
+  z-index: 100;
+}
+
+/* Expanded group overlay */
+.group-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--modal-bg);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-expanded {
+  background-color: var(--modal-content-bg);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 300px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.group-expanded-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.group-expanded-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.group-expanded-title:hover {
+  background-color: var(--hover-color);
+}
+
+.group-expanded-close {
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-color);
+  opacity: 0.7;
+  padding: 0 8px;
+}
+
+.group-expanded-close:hover {
+  opacity: 1;
+}
+
+.group-expanded-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 8px;
+}
+
+.group-expanded-content .bookmark-item {
+  height: 60px;
+}
+
 .bookmark-item {
   background-color: var(--bg-secondary);
   border-radius: 6px;

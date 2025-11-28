@@ -53,6 +53,30 @@
   <div id="contextMenu" class="context-menu">
     <div class="context-menu-item" id="contextMenuEdit">Edit Bookmark</div>
     <div class="context-menu-item" id="contextMenuDelete">Delete Bookmark</div>
+    <div class="context-menu-item" id="contextMenuRemoveFromGroup" style="display: none;">Remove from Group</div>
+  </div>
+
+  <!-- Group Context Menu -->
+  <div id="groupContextMenu" class="context-menu">
+    <div class="context-menu-item" id="groupContextMenuRename">Rename Group</div>
+    <div class="context-menu-item" id="groupContextMenuUngroup">Ungroup</div>
+    <div class="context-menu-item" id="groupContextMenuDelete">Delete Group</div>
+  </div>
+
+  <!-- Edit Group Modal -->
+  <div id="editGroupModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Edit Group Name</h2>
+      <form id="editGroupForm">
+        <div class="form-group">
+          <label for="editGroupName">Group Name:</label>
+          <input type="text" id="editGroupName" placeholder="My Group" required>
+        </div>
+        <input type="hidden" id="editGroupId">
+        <button type="submit" class="submit-button">Save</button>
+      </form>
+    </div>
   </div>
 
   <!-- Add Bookmark Modal -->
