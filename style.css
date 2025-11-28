@@ -400,10 +400,10 @@ input:checked + .slider:before {
 /* Wobble animation for edit mode */
 @keyframes wobble {
   0% {
-    transform: rotate(-2.5deg) scale(0.98);
+    transform: rotate(-2deg);
   }
   100% {
-    transform: rotate(2.5deg) scale(1.02);
+    transform: rotate(2deg);
   }
 }
 
@@ -459,10 +459,10 @@ input:checked + .slider:before {
 }
 
 .bookmarks-container.edit-mode-active {
-  border: 2px dashed var(--highlight-color);
+  outline: 2px dashed var(--highlight-color);
+  outline-offset: 4px;
   border-radius: 8px;
-  padding: 10px;
-  background-color: rgba(66, 133, 244, 0.05);
+  background-color: rgba(66, 133, 244, 0.03);
 }
 
 .edit-mode-indicator {
