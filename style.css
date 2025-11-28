@@ -679,7 +679,8 @@ input:checked + .slider:before {
   }
 }
 
-.bookmarks-container.edit-mode-active {
+.bookmarks-container.edit-mode-active,
+.bookmark-groups-container.edit-mode-active {
   outline: 2px dashed var(--highlight-color);
   outline-offset: 4px;
   border-radius: 8px;

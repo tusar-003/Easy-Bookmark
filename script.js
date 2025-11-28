@@ -755,8 +755,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load groups from storage
   function loadGroups() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(["bookmarkGroups"], (result) => {
+      chrome.storage.local.get(["bookmarkGroups", "groupOrder"], (result) => {
         bookmarkGroups = result.bookmarkGroups || []
+        
+        // Apply saved group order if available
+        if (result.groupOrder && result.groupOrder.length > 0) {
+          const orderMap = new Map()
+          result.groupOrder.forEach((id, index) => {
+            orderMap.set(id, index)
+          })
+          
+          bookmarkGroups.sort((a, b) => {
+            const orderA = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity
+            const orderB = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity
+            return orderA - orderB
+          })
+        }
+        
         resolve()
       })
     })
@@ -822,6 +837,7 @@ document.addEventListener("DOMContentLoaded", () => {
     isEditMode = true
     document.body.classList.add("edit-mode")
     bookmarksContainer.classList.add("edit-mode-active")
+    bookmarkGroupsContainer.classList.add("edit-mode-active")
     
     // Update button visibility
     editModeBtn.style.display = "none"
@@ -839,6 +855,7 @@ document.addEventListener("DOMContentLoaded", () => {
     isEditMode = false
     document.body.classList.remove("edit-mode")
     bookmarksContainer.classList.remove("edit-mode-active")
+    bookmarkGroupsContainer.classList.remove("edit-mode-active")
     
     // Update button visibility
     editModeBtn.style.display = "block"
@@ -849,6 +866,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Save the new order
     saveBookmarkOrder()
+    saveGroupOrder()
     
     // Re-render bookmarks without drag handlers
     renderBookmarks(allBookmarks)
@@ -858,6 +876,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function saveBookmarkOrder() {
     const bookmarkOrder = allBookmarks.map(b => b.id)
     chrome.storage.local.set({ bookmarkOrder: bookmarkOrder })
+  }
+
+  // Save group order to storage
+  function saveGroupOrder() {
+    const groupOrder = bookmarkGroups.map(g => g.id)
+    chrome.storage.local.set({ groupOrder: groupOrder })
   }
 
   // Load saved bookmark order and reorder bookmarks accordingly
@@ -1048,47 +1072,92 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle reordering of items
   function handleReorder(targetId, targetType) {
-    // Build the display order
-    const displayOrder = []
-    
-    // Get current order from DOM
-    document.querySelectorAll('.bookmark-item, .bookmark-group').forEach(el => {
-      const type = el.dataset.type
-      const id = el.dataset.id
-      if (type === 'group') {
-        displayOrder.push(`group-${id}`)
+    // If dragging a group onto another group, reorder groups
+    if (draggedGroupId && targetType === 'group') {
+      // Build the group order from DOM
+      const groupOrder = []
+      bookmarkGroupsContainer.querySelectorAll('.bookmark-group').forEach(el => {
+        groupOrder.push(el.dataset.id)
+      })
+      
+      const draggedIndex = groupOrder.indexOf(draggedGroupId)
+      let targetIndex = groupOrder.indexOf(targetId)
+      
+      if (draggedIndex === -1 || targetIndex === -1) return
+      
+      // Remove dragged item
+      groupOrder.splice(draggedIndex, 1)
+      
+      // Recalculate target index
+      targetIndex = groupOrder.indexOf(targetId)
+      
+      // Insert at new position
+      if (dropPosition === 'after') {
+        groupOrder.splice(targetIndex + 1, 0, draggedGroupId)
       } else {
-        displayOrder.push(id)
+        groupOrder.splice(targetIndex, 0, draggedGroupId)
       }
-    })
-    
-    // Find indices
-    const draggedId = draggedGroupId ? `group-${draggedGroupId}` : draggedBookmarkId
-    const targetIdFull = targetType === 'group' ? `group-${targetId}` : targetId
-    
-    const draggedIndex = displayOrder.indexOf(draggedId)
-    let targetIndex = displayOrder.indexOf(targetIdFull)
-    
-    if (draggedIndex === -1 || targetIndex === -1) return
-    
-    // Remove dragged item
-    displayOrder.splice(draggedIndex, 1)
-    
-    // Recalculate target index
-    targetIndex = displayOrder.indexOf(targetIdFull)
-    
-    // Insert at new position
-    if (dropPosition === 'after') {
-      displayOrder.splice(targetIndex + 1, 0, draggedId)
-    } else {
-      displayOrder.splice(targetIndex, 0, draggedId)
+      
+      // Reorder bookmarkGroups array based on new order
+      const newBookmarkGroups = []
+      groupOrder.forEach(id => {
+        const group = bookmarkGroups.find(g => g.id === id)
+        if (group) newBookmarkGroups.push(group)
+      })
+      bookmarkGroups = newBookmarkGroups
+      
+      // Save and re-render
+      saveGroups()
+      renderGroups()
+      return
     }
     
-    // Save the new order
-    chrome.storage.local.set({ displayOrder: displayOrder })
-    
-    // Re-render
-    renderBookmarks(allBookmarks)
+    // Handle bookmark reordering
+    if (draggedBookmarkId && targetType === 'bookmark') {
+      // Build the bookmark order from DOM
+      const bookmarkOrder = []
+      bookmarksContainer.querySelectorAll('.bookmark-item').forEach(el => {
+        bookmarkOrder.push(el.dataset.id)
+      })
+      
+      const draggedIndex = bookmarkOrder.indexOf(draggedBookmarkId)
+      let targetIndex = bookmarkOrder.indexOf(targetId)
+      
+      if (draggedIndex === -1 || targetIndex === -1) return
+      
+      // Remove dragged item
+      bookmarkOrder.splice(draggedIndex, 1)
+      
+      // Recalculate target index
+      targetIndex = bookmarkOrder.indexOf(targetId)
+      
+      // Insert at new position
+      if (dropPosition === 'after') {
+        bookmarkOrder.splice(targetIndex + 1, 0, draggedBookmarkId)
+      } else {
+        bookmarkOrder.splice(targetIndex, 0, draggedBookmarkId)
+      }
+      
+      // Reorder allBookmarks array based on new order for ungrouped bookmarks
+      const groupedBookmarkIds = new Set()
+      bookmarkGroups.forEach(group => {
+        group.bookmarkIds.forEach(id => groupedBookmarkIds.add(id))
+      })
+      
+      const ungroupedBookmarks = []
+      bookmarkOrder.forEach(id => {
+        const bookmark = allBookmarks.find(b => b.id === id)
+        if (bookmark) ungroupedBookmarks.push(bookmark)
+      })
+      
+      // Rebuild allBookmarks: grouped bookmarks first (in their original order), then ungrouped in new order
+      const groupedBookmarks = allBookmarks.filter(b => groupedBookmarkIds.has(b.id))
+      allBookmarks = [...groupedBookmarks, ...ungroupedBookmarks]
+      
+      // Save and re-render
+      saveBookmarkOrder()
+      renderBookmarks(allBookmarks)
+    }
   }
 
   // Delete a single bookmark
