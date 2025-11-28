@@ -37,17 +37,26 @@ document.addEventListener("DOMContentLoaded", () => {
       const isDark = result.theme !== 'light';
       document.body.classList.toggle("dark-theme", isDark);
       if (themeToggle) {
+        // Toggle should be checked (right side) for dark mode
         themeToggle.checked = isDark;
       }
     });
   }
 
   // Theme toggle functionality
+  // When checked (toggle on right/Dark side) = dark mode
+  // When unchecked (toggle on left/Light side) = light mode
   themeToggle.addEventListener("change", () => {
     const isDark = themeToggle.checked;
     document.body.classList.toggle("dark-theme", isDark);
     chrome.storage.local.set({ theme: isDark ? "dark" : "light" });
   });
+  
+  // Initialize theme immediately to sync toggle with body class
+  // This ensures toggle position matches the actual theme on page load
+  if (document.body.classList.contains("dark-theme")) {
+    themeToggle.checked = true;
+  }
 
   // Load most visited sites
   function loadMostVisitedSites() {
