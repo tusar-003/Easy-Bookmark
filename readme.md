@@ -1,7 +1,11 @@
 # Easy Bookmarks
 
-A Chrome extension that displays your bookmarks as icons on the new tab page for quick and easy access.
+A browser extension that displays your bookmarks as icons on the new tab page for quick and easy access. Available for both **Chrome/Chromium-based browsers** and **Firefox**.
 
+## Supported Browsers
+
+- **Chrome** (and Chromium-based browsers like Edge, Brave, Opera, Vivaldi)
+- **Firefox** (and Firefox-based browsers)
 
 ## Features
 
@@ -27,12 +31,26 @@ A Chrome extension that displays your bookmarks as icons on the new tab page for
 
 ## Installation
 
-### Manual Installation (Developer Mode)
+### Chrome / Chromium-based Browsers (Developer Mode)
 1. Download or clone this repository
 2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable "Developer mode" by toggling the switch in the top right corner
-4. Click "Load unpacked" and select the folder containing the extension files
+4. Click "Load unpacked" and select the **`Chrome`** folder
 5. The extension will be installed and active
+
+### Firefox (Developer Mode)
+1. Download or clone this repository
+2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
+3. Click "Load Temporary Add-on..."
+4. Navigate to the **`Firefox`** folder and select the `manifest.json` file
+5. The extension will be installed (note: temporary add-ons are removed when Firefox closes)
+
+### Firefox (Permanent Installation)
+To install permanently in Firefox:
+1. Package the Firefox folder contents into a `.zip` file
+2. Rename the `.zip` to `.xpi`
+3. Go to `about:addons` and drag the `.xpi` file into Firefox
+4. Or submit to [Firefox Add-ons](https://addons.mozilla.org/) for official distribution
 
 ## Usage
 
@@ -113,12 +131,36 @@ This extension:
 ## Development
 
 ### Project Structure
-- `manifest.json`: Extension configuration
-- `newtab.html`: Main HTML for the new tab page
-- `style.css`: Styling for the extension
-- `script.js`: Main JavaScript functionality
-- `background.js`: Background service worker for favicon caching
-- `icons/`: Extension icons
+```
+Easy Bookmark/
+├── Chrome/                 # Chrome/Chromium version
+│   ├── manifest.json       # Chrome Manifest V3
+│   ├── newtab.html
+│   ├── style.css
+│   ├── script.js
+│   ├── background.js
+│   └── icons/
+│
+├── Firefox/                # Firefox version
+│   ├── manifest.json       # Firefox Manifest V2 with gecko settings
+│   ├── newtab.html
+│   ├── style.css
+│   ├── script.js           # Uses browser API instead of chrome API
+│   ├── background.js
+│   └── icons/
+│
+└── README.md
+```
+
+### Key Differences Between Versions
+
+| Feature | Chrome | Firefox |
+|---------|--------|---------|
+| Manifest Version | V3 | V2 |
+| API Namespace | `chrome.*` | `browser.*` |
+| Background Script | Service Worker | Background Script |
+| Favicon API | Chrome internal `_favicon` | External services only |
+| Permissions | Includes `favicon` | No `favicon` permission |
 
 ### Key Components
 - **Most Visited Section**: Displays top 12 frequently visited sites

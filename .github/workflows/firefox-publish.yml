@@ -1,0 +1,40 @@
+# Automatically publish Firefox extension to Mozilla Add-ons
+# Triggers when you create a new release/tag on GitHub
+
+name: Publish Firefox Extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install web-ext
+        run: npm install -g web-ext
+
+      - name: Build Firefox extension
+        run: |
+          cd Firefox
+          zip -r ../easy-bookmarks-firefox.zip ./*
+
+      - name: Sign and publish to Mozilla Add-ons
+        run: |
+          cd Firefox
+          web-ext sign --channel=listed \
+            --api-key=${{ secrets.AMO_API_KEY }} \
+            --api-secret=${{ secrets.AMO_API_SECRET }}
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}

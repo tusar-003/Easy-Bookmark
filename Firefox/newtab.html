@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Easy Bookmarks</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="container">
+    <header>
+      <h1>Easy Bookmarks</h1>
+      <div class="header-controls">
+        <div class="search-container">
+          <input type="text" id="searchInput" placeholder="Search...">
+        </div>
+        <div class="bookmark-actions">
+          <button id="addBookmarkBtn" class="action-button">Add Bookmark</button>
+          <button id="deleteBookmarksBtn" class="action-button delete-button">Delete Bookmarks</button>
+          <button id="deleteSelectedBtn" class="action-button delete-button" style="display: none;">Delete Selected</button>
+          <button id="cancelSelectionBtn" class="action-button cancel-button" style="display: none;">Cancel</button>
+          <button id="importBookmarksBtn" class="action-button">Import Bookmarks</button>
+          <button id="editModeBtn" class="action-button edit-button">Edit</button>
+          <button id="doneEditingBtn" class="action-button done-button" style="display: none;">Done</button>
+        </div>
+        <div class="theme-switch-wrapper">
+          <span class="theme-icon">Dark</span>
+          <label class="switch">
+            <input type="checkbox" id="themeToggle">
+            <span class="slider">
+              <span class="switch-indicator"></span>
+            </span>
+          </label>
+          <span class="theme-icon">Light</span>
+        </div>
+      </div>
+    </header>
+    
+    <div class="most-visited-section">
+      <h2>Most Visited</h2>
+      <div class="most-visited-container" id="mostVisitedContainer">
+        <!-- Most visited sites will be loaded here -->
+        <div class="loading-small">Loading...</div>
+      </div>
+    </div>
+    
+    <div class="bookmark-groups-section" id="bookmarkGroupsSection" style="display: none;">
+      <h2>Bookmark Groups</h2>
+      <div class="bookmark-groups-container" id="bookmarkGroupsContainer">
+        <!-- Bookmark groups will be loaded here -->
+      </div>
+    </div>
+    
+    <h2>All Bookmarks</h2>
+    <div class="bookmarks-container" id="bookmarksContainer">
+      <!-- Bookmarks will be loaded here -->
+      <div class="loading">Loading your bookmarks...</div>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="contextMenu" class="context-menu">
+    <div class="context-menu-item" id="contextMenuEdit">Edit Bookmark</div>
+    <div class="context-menu-item" id="contextMenuDelete">Delete Bookmark</div>
+    <div class="context-menu-item" id="contextMenuRemoveFromGroup" style="display: none;">Remove from Group</div>
+  </div>
+
+  <!-- Group Context Menu -->
+  <div id="groupContextMenu" class="context-menu">
+    <div class="context-menu-item" id="groupContextMenuRename">Rename Group</div>
+    <div class="context-menu-item" id="groupContextMenuUngroup">Ungroup</div>
+    <div class="context-menu-item" id="groupContextMenuDelete">Delete Group</div>
+  </div>
+
+  <!-- Edit Group Modal -->
+  <div id="editGroupModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Edit Group Name</h2>
+      <form id="editGroupForm">
+        <div class="form-group">
+          <label for="editGroupName">Group Name:</label>
+          <input type="text" id="editGroupName" placeholder="My Group" required>
+        </div>
+        <input type="hidden" id="editGroupId">
+        <button type="submit" class="submit-button">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Bookmark Modal -->
+  <div id="addBookmarkModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Add New Bookmark</h2>
+      <form id="addBookmarkForm">
+        <div class="form-group">
+          <label for="bookmarkUrl">URL:</label>
+          <input type="url" id="bookmarkUrl" placeholder="https://example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="bookmarkTitle">Title (optional):</label>
+          <input type="text" id="bookmarkTitle" placeholder="My Website">
+        </div>
+        <button type="submit" class="submit-button">Add Bookmark</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Bookmark Modal -->
+  <div id="editBookmarkModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Edit Bookmark</h2>
+      <form id="editBookmarkForm">
+        <div class="form-group">
+          <label for="editBookmarkUrl">URL:</label>
+          <input type="url" id="editBookmarkUrl" placeholder="https://example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="editBookmarkTitle">Title:</label>
+          <input type="text" id="editBookmarkTitle" placeholder="My Website" required>
+        </div>
+        <input type="hidden" id="editBookmarkId">
+        <button type="submit" class="submit-button">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Import Bookmarks Modal -->
+  <div id="importModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Import Bookmarks</h2>
+      <div class="import-instructions">
+        <p>To import bookmarks from another browser:</p>
+        <ol>
+          <li>Export bookmarks from your browser as HTML file</li>
+          <li>Upload the file below</li>
+        </ol>
+      </div>
+      <div class="import-form">
+        <input type="file" id="importFile" accept=".html">
+        <button id="importSubmitBtn" class="submit-button">Import</button>
+      </div>
+      <div id="importStatus" class="import-status"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
