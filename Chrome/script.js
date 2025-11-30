@@ -495,14 +495,6 @@ document.addEventListener("DOMContentLoaded", () => {
       groupIcon.appendChild(favicon)
     })
     
-    // Fill empty slots
-    for (let i = previewBookmarks.length; i < 4; i++) {
-      const placeholder = document.createElement("div")
-      placeholder.style.backgroundColor = "var(--border-color)"
-      placeholder.style.borderRadius = "4px"
-      groupIcon.appendChild(placeholder)
-    }
-    
     // Add count badge
     const countBadge = document.createElement("span")
     countBadge.className = "group-count"
