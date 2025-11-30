@@ -90,9 +90,15 @@ body {
   background-color: var(--bg-color);
   background-image: radial-gradient(circle at 50% 0%, #f5f7fa 0%, #e0e5ec 100%);
   color: var(--text-color);
-  transition: background-color 0.3s ease, color 0.3s ease;
   min-height: 100vh;
   background-attachment: fixed;
+}
+
+/* Disable all transitions during theme switch for performance */
+/* But exclude the switch elements so toggle animation still works */
+body.theme-switching,
+body.theme-switching *:not(.switch):not(.switch *):not(.slider):not(.switch-indicator) {
+  transition: none !important;
 }
 
 .container {

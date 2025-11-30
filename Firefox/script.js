@@ -64,8 +64,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // When unchecked (toggle on left/Light side) = light mode
   themeToggle.addEventListener("change", () => {
     const isDark = themeToggle.checked;
-    document.body.classList.toggle("dark-theme", isDark);
-    browserAPI.storage.local.set({ theme: isDark ? "dark" : "light" });
+    
+    // Disable transitions on all elements during theme switch
+    document.body.classList.add("theme-switching");
+    
+    // Use requestAnimationFrame to let the toggle animation start first
+    requestAnimationFrame(() => {
+      // Apply theme change after a short delay to let toggle animation complete
+      setTimeout(() => {
+        document.body.classList.toggle("dark-theme", isDark);
+        browserAPI.storage.local.set({ theme: isDark ? "dark" : "light" });
+        
+        // Re-enable transitions after theme is applied
+        requestAnimationFrame(() => {
+          document.body.classList.remove("theme-switching");
+        });
+      }, 50);
+    });
   });
   
   // Initialize theme immediately to sync toggle with body class
@@ -258,107 +273,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Cache for favicon URLs that work
-  const faviconCache = new Map();
-
-  // Get all possible favicon sources for a URL (Firefox version - no chrome-extension:// URLs)
-  function getAllFaviconSources(url) {
+  // Get favicon URL using Google's favicon service
+  // This is the most reliable single source for Firefox
+  function getFaviconUrl(url) {
     try {
-      const urlObj = new URL(url);
-      const hostname = urlObj.hostname;
-      const origin = urlObj.origin;
-      const encodedUrl = encodeURIComponent(url);
-      
-      return [
-        // Google's favicon services (very reliable)
-        `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
-        `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`,
-        `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
-        // Google's T2 service with full URL support
-        `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodedUrl}&size=128`,
-        `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodedUrl}&size=64`,
-        // DuckDuckGo favicon service
-        `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
-        // Direct favicon URLs from the website
-        `${origin}/favicon.ico`,
-        `${origin}/apple-touch-icon.png`,
-        `${origin}/apple-touch-icon-precomposed.png`,
-        `${origin}/favicon-32x32.png`,
-        `${origin}/favicon-16x16.png`,
-      ];
+      const hostname = new URL(url).hostname;
+      return `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
     } catch (e) {
-      return [];
+      return "icons/default-favicon.svg";
     }
   }
 
-  // Load favicon by racing all sources - first one to load wins
-  async function loadFaviconWithFallback(imgElement, url) {
-    // Check memory cache first
-    if (faviconCache.has(url)) {
-      imgElement.src = faviconCache.get(url);
-      return;
-    }
-
-    const sources = getAllFaviconSources(url);
-    if (sources.length === 0) {
+  // Load favicon with fallback to default
+  function loadFaviconWithFallback(imgElement, url) {
+    const faviconUrl = getFaviconUrl(url);
+    
+    // Set up error handler for fallback
+    imgElement.onerror = () => {
+      imgElement.onerror = null; // Prevent infinite loop
       imgElement.src = "icons/default-favicon.svg";
-      return;
-    }
-
-    // Race all sources - first valid one wins
-    const result = await raceForValidFavicon(sources);
-    if (result) {
-      imgElement.src = result;
-      faviconCache.set(url, result);
-    } else {
-      imgElement.src = "icons/default-favicon.svg";
-    }
-  }
-
-  // Race all favicon sources and return the first one that loads successfully
-  function raceForValidFavicon(sources) {
-    return new Promise((resolve) => {
-      let resolved = false;
-      let failedCount = 0;
-      const total = sources.length;
-
-      // Helper to handle completion
-      const handleResult = (success, src) => {
-        if (resolved) return;
-        
-        if (success) {
-          resolved = true;
-          resolve(src);
-        } else {
-          failedCount++;
-          if (failedCount >= total) {
-            resolve(null);
-          }
-        }
-      };
-
-      // Start loading all sources simultaneously
-      sources.forEach((src) => {
-        const img = new Image();
-        
-        img.onload = () => {
-          // Verify it's a real image, not a 1x1 placeholder
-          const isValid = img.naturalWidth > 2 && img.naturalHeight > 2;
-          handleResult(isValid, src);
-        };
-        
-        img.onerror = () => handleResult(false, src);
-        
-        img.src = src;
-      });
-
-      // Timeout fallback after 5 seconds
-      setTimeout(() => {
-        if (!resolved) {
-          resolve(null);
-        }
-      }, 5000);
-    });
+    };
+    
+    imgElement.src = faviconUrl;
   }
 
   // Render bookmarks to the page
